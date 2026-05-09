@@ -39,7 +39,10 @@ func (c *QosClient) FetchHistoryKline(code string, kt int, count int) ([]json.Ra
 	}
 
 	body, _ := json.Marshal(req)
-	c.send(body)
+	if err := c.send(body); err != nil {
+		c.pending.Delete(reqid)
+		return nil, err
+	}
 
 	select {
 	case resp := <-ch:
@@ -53,7 +56,12 @@ func (c *QosClient) FetchHistoryKline(code string, kt int, count int) ([]json.Ra
 			return nil, err
 		}
 		var data []json.RawMessage
-		json.Unmarshal(msg.Data, &data)
+		if err := json.Unmarshal(msg.Data, &data); err != nil {
+			return nil, err
+		}
+		if data == nil {
+			data = []json.RawMessage{}
+		}
 		return data, nil
 	case <-time.After(10 * time.Second):
 		c.pending.Delete(reqid)
@@ -77,7 +85,10 @@ func (c *QosClient) FetchQuote(code string) (*Quote, error) {
 	}
 
 	body, _ := json.Marshal(req)
-	c.send(body)
+	if err := c.send(body); err != nil {
+		c.pending.Delete(reqid)
+		return nil, err
+	}
 
 	select {
 	case resp := <-ch:
@@ -95,7 +106,7 @@ func (c *QosClient) FetchQuote(code string) (*Quote, error) {
 				V  string `json:"v"`
 				T  string `json:"t"`
 				Ts int64  `json:"ts"`
-				S  string `json:"s"`
+				S  interface{} `json:"s"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(resp.msg, &msg); err != nil {
@@ -109,7 +120,7 @@ func (c *QosClient) FetchQuote(code string) (*Quote, error) {
 			Code: d.C, Price: parseFloat(d.Lp), YP: parseFloat(d.Yp),
 			Open: parseFloat(d.O), High: parseFloat(d.H), Low: parseFloat(d.L),
 			Volume: parseFloat(d.V), Turnover: parseFloat(d.T),
-			Timestamp: d.Ts, Status: d.S,
+			Timestamp: d.Ts, Status: fmt.Sprint(d.S),
 		}, nil
 	case <-time.After(10 * time.Second):
 		c.pending.Delete(reqid)

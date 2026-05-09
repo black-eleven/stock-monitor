@@ -69,6 +69,12 @@ func main() {
 	// WebSocket endpoint
 	r.GET("/ws", func(c *gin.Context) { hub.ServeWS(c.Writer, c.Request) })
 
+	// Static files (must be last — API and WS routes match first)
+	r.Static("/css", "./web/css")
+	r.Static("/js", "./web/js")
+	r.StaticFile("/", "./web/index.html")
+	r.StaticFile("/index.html", "./web/index.html")
+
 	go func() {
 		log.Printf("Starting server on :%s", cfg.Port)
 		if err := r.Run(":" + cfg.Port); err != nil {

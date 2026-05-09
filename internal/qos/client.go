@@ -2,6 +2,8 @@ package qos
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -107,9 +109,23 @@ func (c *QosClient) Connect() {
 		go c.readLoop(conn)
 		c.writeLoop(conn)
 
+		// Connection lost — reject all pending requests
 		c.connected.Store(false)
+		c.rejectPending()
 		log.Println("[QOS] Disconnected, reconnecting...")
 	}
+}
+
+func (c *QosClient) rejectPending() {
+	c.pending.Range(func(key, value any) bool {
+		ch := value.(chan rawResponse)
+		select {
+		case ch <- rawResponse{err: errors.New("connection lost")}:
+		default:
+		}
+		c.pending.Delete(key)
+		return true
+	})
 }
 
 func (c *QosClient) readLoop(conn *websocket.Conn) {
@@ -133,7 +149,7 @@ func (c *QosClient) readLoop(conn *websocket.Conn) {
 			V     string          `json:"v"`
 			T     string          `json:"t"`
 			Ts    int64           `json:"ts"`
-			S     string          `json:"s"`
+			S     interface{}     `json:"s"`
 			Cl    string          `json:"cl"`
 			Kt    int             `json:"kt"`
 		}
@@ -148,7 +164,7 @@ func (c *QosClient) readLoop(conn *websocket.Conn) {
 				Code: msg.C, Price: parseFloat(msg.Lp), YP: parseFloat(msg.Yp),
 				Open: parseFloat(msg.O), High: parseFloat(msg.H), Low: parseFloat(msg.L),
 				Volume: parseFloat(msg.V), Turnover: parseFloat(msg.T),
-				Timestamp: msg.Ts, Status: msg.S,
+				Timestamp: msg.Ts, Status: fmt.Sprint(msg.S),
 			})
 
 		case msg.Tp == "K" && c.OnKline != nil:
@@ -177,27 +193,32 @@ func (c *QosClient) writeLoop(conn *websocket.Conn) {
 				return
 			}
 		case <-heartbeat.C:
-			c.send([]byte(`{"type":"H"}`))
+			if err := c.send([]byte(`{"type":"H"}`)); err != nil {
+				log.Println("[QOS] heartbeat send failed:", err)
+			}
 		}
 	}
 }
 
-func (c *QosClient) send(data []byte) {
+func (c *QosClient) send(data []byte) error {
 	select {
 	case c.sendCh <- data:
+		return nil
 	default:
-		log.Println("[QOS] send buffer full, dropping message")
+		return errors.New("send buffer full")
 	}
 }
 
-func (c *QosClient) Send(data []byte) {
-	c.send(data)
+func (c *QosClient) Send(data []byte) error {
+	return c.send(data)
 }
 
 func (c *QosClient) subscribe(codes []string) {
 	c.subscribedCodes = append([]string{}, codes...)
 	if c.connected.Load() {
-		c.sendJSON(map[string]interface{}{"type": "S", "codes": []string{joinCodes(codes)}})
+		if err := c.sendJSON(map[string]interface{}{"type": "S", "codes": []string{joinCodes(codes)}}); err != nil {
+			log.Println("[QOS] subscribe send failed:", err)
+		}
 	}
 }
 
@@ -214,9 +235,9 @@ func (c *QosClient) Close() {
 	}
 }
 
-func (c *QosClient) sendJSON(v interface{}) {
+func (c *QosClient) sendJSON(v interface{}) error {
 	data, _ := json.Marshal(v)
-	c.send(data)
+	return c.send(data)
 }
 
 func joinCodes(codes []string) string {

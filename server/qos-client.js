@@ -11,6 +11,7 @@ class QosClient {
     this.reconnectTimer = null;
     this.heartbeatTimer = null;
     this._reconnectAttempt = 0;
+    this._reqSeq = 0;
     this._pendingRejects = [];
   }
 
@@ -83,7 +84,7 @@ class QosClient {
     return new Promise((resolve, reject) => {
       if (!this.connected) return reject(new Error('Not connected'));
 
-      const reqid = Date.now();
+      const reqid = Date.now() * 1000 + (++this._reqSeq % 1000);
       this._pendingRejects.push(reject);
 
       const handler = (raw) => {
@@ -118,7 +119,7 @@ class QosClient {
     return new Promise((resolve, reject) => {
       if (!this.connected) return reject(new Error('Not connected'));
 
-      const reqid = Date.now();
+      const reqid = Date.now() * 1000 + (++this._reqSeq % 1000);
       this._pendingRejects.push(reject);
 
       const handler = (raw) => {

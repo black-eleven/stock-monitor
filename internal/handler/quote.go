@@ -47,7 +47,7 @@ func (h *QuoteHandler) batch(c *gin.Context) {
 
 	for _, s := range trimmed {
 		go func(symbol string) {
-			q, err := h.qos.FetchQuote(symbol)
+			q, err := h.qos.FetchQuoteCached(symbol)
 			if err != nil {
 				results <- result{symbol: symbol}
 			} else {
@@ -72,7 +72,7 @@ func (h *QuoteHandler) single(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid symbol format. Use HK:700 / SH:600519 / SZ:000001 / US:AAPL"})
 		return
 	}
-	quote, err := h.qos.FetchQuote(symbol)
+	quote, err := h.qos.FetchQuoteCached(symbol)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch quote"})
 		return

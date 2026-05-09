@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -48,8 +49,9 @@ func (h *KlineHandler) getKline(c *gin.Context) {
 		return
 	}
 
-	data, err := h.qos.FetchHistoryKline(symbol, kt, count)
+	data, err := h.qos.FetchHistoryKlineCached(symbol, kt, count)
 	if err != nil {
+		log.Printf("[Kline] Failed to fetch kline for %s (kt=%d): %v", symbol, kt, err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch kline data"})
 		return
 	}
