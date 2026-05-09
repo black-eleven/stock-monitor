@@ -1,5 +1,7 @@
 package model
 
+import "github.com/black-eleven/stock-monitor/internal/qos"
+
 type Quote struct {
 	Code      string  `json:"code"`
 	Price     float64 `json:"price"`
@@ -16,6 +18,15 @@ type Quote struct {
 func (q Quote) GetCode() string  { return q.Code }
 func (q Quote) GetPrice() float64 { return q.Price }
 func (q Quote) GetYP() float64    { return q.YP }
+
+func FromQosQuote(q qos.Quote) Quote {
+	return Quote{
+		Code: q.Code, Price: q.Price, YP: q.YP,
+		Open: q.Open, High: q.High, Low: q.Low,
+		Volume: q.Volume, Turnover: q.Turnover,
+		Timestamp: q.Timestamp, Status: q.Status,
+	}
+}
 
 type KlineBar struct {
 	Ts int64   `json:"ts"`

@@ -1,0 +1,117 @@
+package ws
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"sync"
+
+	"github.com/gorilla/websocket"
+)
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
+
+type Hub struct {
+	clients    map[*Client]bool
+	register   chan *Client
+	unregister chan *Client
+	broadcast  chan []byte
+	mu         sync.RWMutex
+	quotes     sync.Map
+}
+
+func NewHub() *Hub {
+	return &Hub{
+		clients:    make(map[*Client]bool),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+		broadcast:  make(chan []byte, 256),
+	}
+}
+
+func (h *Hub) Run() {
+	for {
+		select {
+		case client := <-h.register:
+			h.mu.Lock()
+			h.clients[client] = true
+			h.mu.Unlock()
+			go h.sendSnapshot(client)
+
+		case client := <-h.unregister:
+			h.mu.Lock()
+			if _, ok := h.clients[client]; ok {
+				delete(h.clients, client)
+				close(client.send)
+			}
+			h.mu.Unlock()
+
+		case msg := <-h.broadcast:
+			h.mu.RLock()
+			for client := range h.clients {
+				select {
+				case client.send <- msg:
+				default:
+					close(client.send)
+					delete(h.clients, client)
+				}
+			}
+			h.mu.RUnlock()
+		}
+	}
+}
+
+func (h *Hub) sendSnapshot(client *Client) {
+	var quotes []json.RawMessage
+	h.quotes.Range(func(_, v interface{}) bool {
+		quotes = append(quotes, v.(json.RawMessage))
+		return true
+	})
+	if quotes == nil {
+		quotes = []json.RawMessage{}
+	}
+	msg, _ := json.Marshal(map[string]interface{}{
+		"type": "snapshot",
+		"data": quotes,
+	})
+	select {
+	case client.send <- msg:
+	default:
+	}
+}
+
+func (h *Hub) BroadcastQuote(quote interface{}) {
+	data, _ := json.Marshal(quote)
+	msg, _ := json.Marshal(map[string]interface{}{
+		"type": "quote",
+		"data": json.RawMessage(data),
+	})
+	h.broadcast <- msg
+}
+
+func (h *Hub) BroadcastAlert(alert interface{}) {
+	data, _ := json.Marshal(alert)
+	msg, _ := json.Marshal(map[string]interface{}{
+		"type": "alert",
+		"data": json.RawMessage(data),
+	})
+	h.broadcast <- msg
+}
+
+func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("[WS] Upgrade error: %v", err)
+		return
+	}
+	client := &Client{
+		hub:  h,
+		conn: conn,
+		send: make(chan []byte, 256),
+	}
+	h.register <- client
+	go client.writePump()
+	go client.readPump()
+}
