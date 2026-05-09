@@ -1,0 +1,60 @@
+{
+  "permissions": {
+    "allow": [
+        "Read(./**)",
+        "Write(./**)",
+        "Update(./**)",
+        "Bash(ls ./**)",
+        "Bash(cat ./**)",
+        "Bash(head ./**)",
+        "Bash(tail ./**)",
+        "Bash(grep ./**)",
+        "Bash(find ./**)",
+        "Bash(wc ./**)",
+        "Bash(echo)",
+        "Bash(git status)",
+        "Bash(git diff)",
+        "Bash(git log)",
+        "Bash(git branch)",
+        "Bash(git checkout -b *)",
+        "Bash(git add ./**)",
+        "Bash(npm run build)", "Bash(npm run test:*)",
+        "Bash(make)", "Bash(dotnet build)",
+        "Bash(cargo build)",
+        "Bash(go build)",
+        "Bash(go test)",
+        "Bash(npm install)", "Bash(pip install -r requirements.txt)",
+        "Bash(./scripts/lint.sh)", "Bash(./scripts/format.sh)"
+    ],
+    "deny": [
+        "Read(.env)",
+        "Read(.git)",
+        "Write(.env)",
+        "Write(.git)",
+        "Update(.env)",
+        "Update(.git)",
+        "Bash(rm -rf /)", "Bash(sudo *)", "Bash(chmod 777 *)",
+        "Bash(dd if=*)", "Bash(mkfs.*)", "Bash(>:*)",
+        "Bash(rm -rf *)",
+        "Bash(git push --force)",
+        "Bash(git push origin master --force)",
+        "Bash(dropdb *)",
+        "Bash(kill -9 *)",
+        "Bash(curl http://* | bash)",
+        "Bash(chown *)", "Bash(chgrp *)",
+        "Bash(export *)", "Bash(alias *)", "Bash(unset *)",
+        "Bash(iptables *)", "Bash(netstat --delete *)"
+    ],
+    "ask": [
+        "Bash(git push origin *)",
+        "Bash(git merge *)",
+        "Bash(rm <file>)",
+        "Bash(mv * /system/path)",
+        "Bash(docker rmi *)",
+        "Bash(docker system prune -f)",
+        "Bash(npm install -g *)",
+        "Bash(pip install * --user)",
+        "Bash(ln -s * /usr/local/bin)"
+    ]
+  }
+}
