@@ -54,7 +54,7 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Shorten HK stock code: "HK:700" -> "700"
+// Strip market prefix: "HK:700" -> "700", "SH:600519" -> "600519"
 function shortCode(code) {
-  return code.replace(/^HK:/, '');
+  return code.replace(/^(HK|SH|SZ|US):/, '');
 }

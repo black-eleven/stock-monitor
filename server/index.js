@@ -68,7 +68,7 @@ qosClient.connect();
 
 // Start server
 server.listen(config.port, () => {
-  console.log(`HK Stock Monitor running at http://localhost:${config.port}`);
+  console.log(`Stock Monitor running at http://localhost:${config.port}`);
 });
 
 // Graceful shutdown

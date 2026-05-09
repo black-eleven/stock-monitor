@@ -88,7 +88,7 @@ class ApiClient {
   // Specific API calls
   async getWatchlist() { return this.get('/api/watchlist'); }
   async addWatchlist(symbol, name) { return this.post('/api/watchlist', { symbol, name }); }
-  async removeWatchlist(symbol) { return this.del(`/api/watchlist/${encodeURIComponent(symbol)}`); }
+  async removeWatchlist(symbol) { return this.del(`/api/watchlist/${symbol}`); }
 
   async getAlerts() { return this.get('/api/alerts'); }
   async addAlert(symbol, type, value) { return this.post('/api/alerts', { symbol, type, value }); }
@@ -97,10 +97,10 @@ class ApiClient {
 
   async getHoldings() { return this.get('/api/holdings'); }
   async addHolding(data) { return this.post('/api/holdings', data); }
-  async updateHolding(symbol, data) { return this.put(`/api/holdings/${encodeURIComponent(symbol)}`, data); }
-  async deleteHolding(symbol) { return this.del(`/api/holdings/${encodeURIComponent(symbol)}`); }
+  async updateHolding(symbol, data) { return this.put(`/api/holdings/${symbol}`, data); }
+  async deleteHolding(symbol) { return this.del(`/api/holdings/${symbol}`); }
 
   async getKline(symbol, interval = '1d', count = 200) {
-    return this.get(`/api/kline/${encodeURIComponent(symbol)}?interval=${interval}&count=${count}`);
+    return this.get(`/api/kline/${symbol}?interval=${interval}&count=${count}`);
   }
 }

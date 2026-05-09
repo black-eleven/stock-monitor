@@ -111,7 +111,7 @@ class WatchlistComponent {
   }
 
   _showAddDialog() {
-    const symbol = prompt('输入股票代码（如 HK:700）:');
+    const symbol = prompt('输入股票代码（如 HK:700 / SH:600519 / US:AAPL）:');
     if (!symbol) return;
     const name = prompt('输入股票名称（如 腾讯控股）:');
     if (!name) return;

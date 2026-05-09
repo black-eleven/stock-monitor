@@ -127,14 +127,41 @@ function detectBearishDivergence(bars, indicatorData) {
   return maxHighIdx > maxIndicatorIdx && indicatorAtMaxHigh < maxIndicator;
 }
 
-// Evaluate 7 sell signals
+// Volume death cross: average volume on down days > up days over last 5 bars
+function detectVolumeDeathCross(bars) {
+  const n = Math.min(5, bars.length);
+  if (n < 3) return false;
+  const recent = bars.slice(-n);
+  let upVol = 0, upDays = 0, downVol = 0, downDays = 0;
+  for (let i = 0; i < recent.length; i++) {
+    const change = recent[i].close - recent[i].open;
+    if (change >= 0) {
+      upVol += recent[i].close * recent[i].volume; // approximate turnover
+      upDays++;
+    } else {
+      downVol += recent[i].close * recent[i].volume;
+      downDays++;
+    }
+  }
+  if (upDays === 0 || downDays === 0) return false;
+  const avgUpVol = upVol / upDays;
+  const avgDownVol = downVol / downDays;
+  return avgDownVol > avgUpVol * 1.2;
+}
+
+// Weighted sell signal evaluation (8 signals, max score = 13.0)
 // bars: array of { time, open, high, low, close }
 // maData: { ma5, ma20, ma60 } where each is [{ time, value }]
 // rsiData: [{ time, value }]
 // macdData: { dif, dea, macd } or null
-// returns: { count, total: 7, signals: Signal[], summary: string }
+// returns: { score, maxScore: 13, count, total: 8, signals: Signal[], summary: string }
 function evaluateSignals(bars, maData, rsiData, macdData) {
+  // Weights: tier-1 reversal signals 2.0–2.5, tier-2 confirmations 1.0, tier-3 redundant 0.5, volume 1.5
+  const W = { ma_cross: 2.0, price_ma20: 1.0, price_ma60: 0.5, rsi_overbought: 1.0, rsi_diverge: 2.5, macd_cross: 2.0, macd_diverge: 2.5, volume_death: 1.5 };
+  const MAX_SCORE = W.ma_cross + W.price_ma20 + W.price_ma60 + W.rsi_overbought + W.rsi_diverge + W.macd_cross + W.macd_diverge + W.volume_death;
+
   const signals = [];
+  let score = 0;
   let count = 0;
 
   const latestBar = bars[bars.length - 1];
@@ -150,106 +177,75 @@ function evaluateSignals(bars, maData, rsiData, macdData) {
   const prevMA20 = ma20.length >= 2 ? ma20[ma20.length - 2] : null;
   const latestMA60 = ma60.length >= 1 ? ma60[ma60.length - 1] : null;
 
-  // ---- 1. MA5 just crossed below MA20 (dead cross) ----
-  let signal1 = {
-    key: 'ma_cross_dead',
-    name: 'MA5死叉MA20',
-    triggered: false,
-    value: null,
-    status: 'ok'
-  };
+  // ---- 1. MA5死叉MA20 (weight 2.0) ----
+  let s1 = { key: 'ma_cross_dead', name: 'MA5死叉MA20', triggered: false, value: null, status: 'ok', weight: W.ma_cross };
   if (prevMA5 && prevMA20 && latestMA5 && latestMA20) {
     if (prevMA5.value >= prevMA20.value && latestMA5.value < latestMA20.value) {
-      signal1.triggered = true;
-      signal1.value = `MA5=${latestMA5.value.toFixed(2)}, MA20=${latestMA20.value.toFixed(2)}`;
-      signal1.status = 'danger';
+      s1.triggered = true;
+      s1.value = `MA5=${latestMA5.value.toFixed(2)}, MA20=${latestMA20.value.toFixed(2)}`;
+      s1.status = 'danger';
+      score += W.ma_cross;
       count++;
     }
   }
-  signals.push(signal1);
+  signals.push(s1);
 
-  // ---- 2. Latest close below latest MA20 ----
-  let signal2 = {
-    key: 'price_below_ma20',
-    name: '收盘价低于MA20',
-    triggered: false,
-    value: null,
-    status: 'ok'
-  };
+  // ---- 2. 收盘 < MA20 (weight 1.0) ----
+  let s2 = { key: 'price_below_ma20', name: '收盘价低于MA20', triggered: false, value: null, status: 'ok', weight: W.price_ma20 };
   if (latestBar && latestMA20) {
     if (latestBar.close < latestMA20.value) {
-      signal2.triggered = true;
-      signal2.value = `收盘=${latestBar.close.toFixed(2)}, MA20=${latestMA20.value.toFixed(2)}`;
-      signal2.status = 'warn';
+      s2.triggered = true;
+      s2.value = `收盘=${latestBar.close.toFixed(2)}, MA20=${latestMA20.value.toFixed(2)}`;
+      s2.status = 'warn';
+      score += W.price_ma20;
       count++;
     }
   }
-  signals.push(signal2);
+  signals.push(s2);
 
-  // ---- 3. Latest close below latest MA60 ----
-  let signal3 = {
-    key: 'price_below_ma60',
-    name: '收盘价低于MA60',
-    triggered: false,
-    value: null,
-    status: 'ok'
-  };
+  // ---- 3. 收盘 < MA60 (weight 0.5) ----
+  let s3 = { key: 'price_below_ma60', name: '收盘价低于MA60', triggered: false, value: null, status: 'ok', weight: W.price_ma60 };
   if (latestBar && latestMA60) {
     if (latestBar.close < latestMA60.value) {
-      signal3.triggered = true;
-      signal3.value = `收盘=${latestBar.close.toFixed(2)}, MA60=${latestMA60.value.toFixed(2)}`;
-      signal3.status = 'warn';
+      s3.triggered = true;
+      s3.value = `收盘=${latestBar.close.toFixed(2)}, MA60=${latestMA60.value.toFixed(2)}`;
+      s3.status = 'warn';
+      score += W.price_ma60;
       count++;
     }
   }
-  signals.push(signal3);
+  signals.push(s3);
 
-  // ---- 4. RSI overbought ----
-  let signal4 = {
-    key: 'rsi_overbought',
-    name: 'RSI超买',
-    triggered: false,
-    value: null,
-    status: 'ok'
-  };
+  // ---- 4. RSI超买 (weight 1.0) ----
+  let s4 = { key: 'rsi_overbought', name: 'RSI超买', triggered: false, value: null, status: 'ok', weight: W.rsi_overbought };
   if (rsiData && rsiData.length >= 1) {
     const latestRSI = rsiData[rsiData.length - 1].value;
     if (latestRSI > 70) {
-      signal4.triggered = true;
-      signal4.value = `RSI=${latestRSI.toFixed(2)}`;
-      signal4.status = latestRSI > 80 ? 'danger' : 'warn';
+      s4.triggered = true;
+      s4.value = `RSI=${latestRSI.toFixed(2)}`;
+      s4.status = latestRSI > 80 ? 'danger' : 'warn';
+      score += W.rsi_overbought;
       count++;
     }
   }
-  signals.push(signal4);
+  signals.push(s4);
 
-  // ---- 5. RSI divergence (bearish) over last 20 bars ----
-  let signal5 = {
-    key: 'rsi_divergence',
-    name: 'RSI顶背离',
-    triggered: false,
-    value: null,
-    status: 'ok'
-  };
+  // ---- 5. RSI顶背离 (weight 2.5) ----
+  let s5 = { key: 'rsi_divergence', name: 'RSI顶背离', triggered: false, value: null, status: 'ok', weight: W.rsi_diverge };
   if (bars && rsiData && rsiData.length >= 2) {
     const divergent = detectBearishDivergence(bars, rsiData);
     if (divergent) {
-      signal5.triggered = true;
-      signal5.value = '价格创新高，RSI未创新高';
-      signal5.status = 'danger';
+      s5.triggered = true;
+      s5.value = '价格创新高，RSI未创新高';
+      s5.status = 'danger';
+      score += W.rsi_diverge;
       count++;
     }
   }
-  signals.push(signal5);
+  signals.push(s5);
 
-  // ---- 6. MACD dead cross (DIF crossed below DEA) ----
-  let signal6 = {
-    key: 'macd_dead_cross',
-    name: 'MACD死叉',
-    triggered: false,
-    value: null,
-    status: 'ok'
-  };
+  // ---- 6. MACD死叉 (weight 2.0) ----
+  let s6 = { key: 'macd_dead_cross', name: 'MACD死叉', triggered: false, value: null, status: 'ok', weight: W.macd_cross };
   if (macdData && macdData.dif && macdData.dea) {
     const dif = macdData.dif;
     const dea = macdData.dea;
@@ -259,49 +255,61 @@ function evaluateSignals(bars, maData, rsiData, macdData) {
       const currDIF = dif[dif.length - 1].value;
       const currDEA = dea[dea.length - 1].value;
       if (prevDIF >= prevDEA && currDIF < currDEA) {
-        signal6.triggered = true;
-        signal6.value = `DIF=${currDIF.toFixed(4)}, DEA=${currDEA.toFixed(4)}`;
-        signal6.status = 'danger';
+        s6.triggered = true;
+        s6.value = `DIF=${currDIF.toFixed(4)}, DEA=${currDEA.toFixed(4)}`;
+        s6.status = 'danger';
+        score += W.macd_cross;
         count++;
       }
     }
   }
-  signals.push(signal6);
+  signals.push(s6);
 
-  // ---- 7. MACD divergence (bearish) over last 20 bars ----
-  let signal7 = {
-    key: 'macd_divergence',
-    name: 'MACD顶背离',
-    triggered: false,
-    value: null,
-    status: 'ok'
-  };
+  // ---- 7. MACD顶背离 (weight 2.5) ----
+  let s7 = { key: 'macd_divergence', name: 'MACD顶背离', triggered: false, value: null, status: 'ok', weight: W.macd_diverge };
   if (bars && macdData && macdData.dif && macdData.dif.length >= 2) {
     const divergent = detectBearishDivergence(bars, macdData.dif);
     if (divergent) {
-      signal7.triggered = true;
-      signal7.value = '价格创新高，DIF未创新高';
-      signal7.status = 'danger';
+      s7.triggered = true;
+      s7.value = '价格创新高，DIF未创新高';
+      s7.status = 'danger';
+      score += W.macd_diverge;
       count++;
     }
   }
-  signals.push(signal7);
+  signals.push(s7);
+
+  // ---- 8. 成交量死叉 (weight 1.5) ----
+  let s8 = { key: 'volume_death_cross', name: '成交量死叉（下跌放量）', triggered: false, value: null, status: 'ok', weight: W.volume_death };
+  if (bars && bars.length >= 3) {
+    if (detectVolumeDeathCross(bars)) {
+      s8.triggered = true;
+      s8.value = '近5日下跌日平均成交量 > 上涨日1.2倍';
+      s8.status = 'warn';
+      score += W.volume_death;
+      count++;
+    }
+  }
+  signals.push(s8);
 
   // ---- Summary ----
+  const pct = Math.round((score / MAX_SCORE) * 100);
   let summary;
-  if (count === 0) {
-    summary = '正常';
-  } else if (count <= 2) {
-    summary = '短期偏弱';
-  } else if (count <= 4) {
-    summary = '偏弱，注意风险';
-  } else {
+  if (pct >= 50) {
     summary = '强烈卖出信号';
+  } else if (pct >= 25) {
+    summary = '偏弱，注意风险';
+  } else if (pct > 0) {
+    summary = '短期偏弱';
+  } else {
+    summary = '正常';
   }
 
   return {
+    score,
+    maxScore: MAX_SCORE,
     count,
-    total: 7,
+    total: 8,
     signals,
     summary
   };

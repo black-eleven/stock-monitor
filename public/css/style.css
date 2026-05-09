@@ -27,8 +27,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .index-item { font-size: 14px; }
 .index-item .name { color: #8b949e; margin-right: 8px; }
 .index-item .price { font-weight: 600; margin-right: 8px; }
-.index-item .change.up { color: #f85149; }   /* HK red for up */
-.index-item .change.down { color: #3fb950; } /* HK green for down */
+	.index-item .change.up { color: #3fb950; }   /* green for up */
+	.index-item .change.down { color: #f85149; } /* red for down */
 
 /* Stock Tabs */
 .stock-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -38,16 +38,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .stock-tab .symbol { font-size: 12px; color: #8b949e; }
 .stock-tab .name { font-size: 14px; font-weight: 500; }
 .stock-tab .change { font-size: 13px; font-weight: 600; }
-.stock-tab .change.up { color: #f85149; }
-.stock-tab .change.down { color: #3fb950; }
+.stock-tab .change.up { color: #3fb950; }
+.stock-tab .change.down { color: #f85149; }
 
 /* Stock Detail */
 .stock-detail { background: #161b22; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
 .stock-detail .price-row { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
 .stock-detail .current-price { font-size: 36px; font-weight: 700; }
 .stock-detail .change-value { font-size: 20px; font-weight: 600; }
-.stock-detail .change-value.up { color: #f85149; }
-.stock-detail .change-value.down { color: #3fb950; }
+.stock-detail .change-value.up { color: #3fb950; }
+.stock-detail .change-value.down { color: #f85149; }
 .stock-detail .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .stock-detail .info-item { font-size: 13px; color: #8b949e; }
 .stock-detail .info-item .value { color: #e6edf3; font-weight: 500; }
@@ -107,8 +107,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .holdings-summary { display: flex; gap: 24px; padding: 16px; background: #161b22; border-radius: 8px; margin: 12px 0; }
 .holdings-summary .stat .label { font-size: 12px; color: #8b949e; }
 .holdings-summary .stat .value { font-size: 20px; font-weight: 600; }
-.holdings-summary .stat .value.up { color: #f85149; }
-.holdings-summary .stat .value.down { color: #3fb950; }
+.holdings-summary .stat .value.up { color: #3fb950; }
+.holdings-summary .stat .value.down { color: #f85149; }
 
 /* Analysis Tab */
 .analysis-summary { background: #161b22; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; font-size: 16px; font-weight: 500; text-align: center; }

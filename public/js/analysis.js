@@ -49,49 +49,52 @@ class AnalysisComponent {
   _renderList() {
     const container = document.getElementById('analysisList');
 
-    // Calculate summary statistics
-    let totalTriggered = 0;
-    let totalPossible = 0;
+    // Calculate summary statistics (weighted score)
+    let totalScore = 0;
+    let totalMaxScore = 0;
     for (const [, result] of this.results) {
-      totalTriggered += result.signals.count;
-      totalPossible += result.signals.total;
+      totalScore += result.signals.score;
+      totalMaxScore += result.signals.maxScore;
     }
-    const numResults = this.results.size;
-    const avgTriggered = numResults > 0 ? totalTriggered / numResults : 0;
+    const avgPct = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
 
-    let stars;
-    if (avgTriggered >= 3) {
-      stars = '★★★'; // ★★★
-    } else if (avgTriggered >= 1) {
-      stars = '★★☆'; // ★★☆
+    let summaryColor, summaryLabel;
+    if (avgPct >= 50) {
+      summaryColor = '#f85149';
+      summaryLabel = '建议关注卖出';
+    } else if (avgPct >= 25) {
+      summaryColor = '#d29922';
+      summaryLabel = '偏弱，注意观察';
     } else {
-      stars = '★☆☆'; // ★☆☆
+      summaryColor = '#3fb950';
+      summaryLabel = '暂无明确卖出信号';
     }
 
-    let html = '<div class="analysis-summary">综合卖出信号: ' + stars + ' (' + totalTriggered + '/' + totalPossible + ' 项触发)</div>';
+    let html = '<div class="analysis-summary" style="color:' + summaryColor + '">卖出指数 <strong style="font-size:28px">' + avgPct + '%</strong> — ' + summaryLabel + '</div>';
     html += '<div class="analysis-cards">';
 
     for (const w of this.watchlist) {
       const result = this.results.get(w.symbol);
       if (!result) continue;
 
-      const count = result.signals.count;
+      const pct = Math.round((result.signals.score / result.signals.maxScore) * 100);
+
+      let pctColor;
+      if (pct >= 50) {
+        pctColor = '#f85149';
+      } else if (pct >= 25) {
+        pctColor = '#d29922';
+      } else {
+        pctColor = '#3fb950';
+      }
+
       let cardClass;
-      if (count >= 3) {
+      if (pct >= 50) {
         cardClass = 'danger';
-      } else if (count > 0) {
+      } else if (pct > 0) {
         cardClass = 'warn';
       } else {
         cardClass = '';
-      }
-
-      let icon;
-      if (count === 0) {
-        icon = '✅'; // ✅
-      } else if (count >= 3) {
-        icon = '🔴'; // 🔴
-      } else {
-        icon = '⚠'; // ⚠
       }
 
       const latestBar = result.bars[result.bars.length - 1];
@@ -103,7 +106,7 @@ class AnalysisComponent {
       html += '<span class="symbol">' + escapeHtml(shortCode(w.symbol)) + '</span>';
       html += '<span class="price">' + escapeHtml(price) + '</span>';
       html += '</div>';
-      html += '<div class="analysis-card-signals">' + icon + ' 卖出信号 ' + count + '/' + result.signals.total + '</div>';
+      html += '<div class="analysis-card-signals">卖出指数 <strong style="font-size:18px;color:' + pctColor + '">' + pct + '%</strong> (' + result.signals.count + '/' + result.signals.total + ')</div>';
       html += '</div>';
     }
 
@@ -125,19 +128,20 @@ class AnalysisComponent {
     const w = this.watchlist.find(function(item) { return item.symbol === symbol; });
     const name = w ? w.name : shortCode(symbol);
     const count = result.signals.count;
+    const pct = Math.round((result.signals.score / result.signals.maxScore) * 100);
 
     let summaryColor;
-    if (count === 0) {
-      summaryColor = 'green';
-    } else if (count >= 3) {
-      summaryColor = 'red';
+    if (pct >= 50) {
+      summaryColor = '#f85149';
+    } else if (pct >= 25) {
+      summaryColor = '#d29922';
     } else {
-      summaryColor = '#ffd700';
+      summaryColor = '#3fb950';
     }
 
     let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
-    html += '<div style="color:' + summaryColor + ';margin:8px 0;font-weight:bold;">' + escapeHtml(result.signals.summary) + ' (' + count + '/' + result.signals.total + ')</div>';
+    html += '<div style="color:' + summaryColor + ';margin:8px 0;">卖出指数 <strong style="font-size:24px">' + pct + '%</strong> — ' + escapeHtml(result.signals.summary) + ' (' + count + '/' + result.signals.total + ')</div>';
 
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 

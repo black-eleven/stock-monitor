@@ -17,9 +17,9 @@ class KlineComponent {
     });
 
     this.candleSeries = this.chart.addCandlestickSeries({
-      upColor: '#f85149', downColor: '#3fb950',
-      borderUpColor: '#f85149', borderDownColor: '#3fb950',
-      wickUpColor: '#f85149', wickDownColor: '#3fb950',
+      upColor: '#3fb950', downColor: '#f85149',
+      borderUpColor: '#3fb950', borderDownColor: '#f85149',
+      wickUpColor: '#3fb950', wickDownColor: '#f85149',
     });
 
     // Setup interval buttons

@@ -19,8 +19,8 @@ module.exports = function (qosClient) {
   // GET /api/quote/:symbol — e.g. /api/quote/HK:700
   router.get('/quote/:symbol', async (req, res) => {
     const symbol = req.params.symbol.toUpperCase();
-    if (!/^HK:\d{2,5}$/.test(symbol)) {
-      return res.status(400).json({ error: 'Invalid symbol format. Use HK:700' });
+    if (!/^(HK|SH|SZ|US):[A-Z0-9]{1,10}$/.test(symbol)) {
+      return res.status(400).json({ error: 'Invalid symbol format. Use HK:700 / SH:600519 / SZ:000001 / US:AAPL' });
     }
     try {
       const data = await qosClient.fetchQuote(symbol);
