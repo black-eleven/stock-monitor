@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Monitor - 登录</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh;
+  }
+  .login-box {
+    background: #161b22;
+    padding: 32px;
+    border-radius: 12px;
+    border: 1px solid #30363d;
+    width: 360px;
+  }
+  h1 { text-align: center; margin-bottom: 24px; font-size: 20px; }
+  .form-group { margin-bottom: 16px; }
+  label { display: block; margin-bottom: 6px; font-size: 13px; color: #8b949e; }
+  input {
+    width: 100%; padding: 10px 12px;
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    color: #e6edf3; font-size: 14px;
+  }
+  input:focus { outline: none; border-color: #1f6feb; }
+  button {
+    width: 100%; padding: 10px; margin-top: 8px;
+    background: #1f6feb; color: white; border: none;
+    border-radius: 6px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { background: #388bfd; }
+  .error { color: #f85149; font-size: 13px; margin-top: 8px; text-align: center; }
+  .toggle { text-align: center; margin-top: 16px; font-size: 13px; color: #8b949e; }
+  .toggle a { color: #58a6ff; cursor: pointer; text-decoration: none; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <h1>Stock Monitor</h1>
+
+  <form id="loginForm">
+    <div class="form-group">
+      <label>用户名</label>
+      <input type="text" name="username" required autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" name="password" required autocomplete="current-password">
+    </div>
+    <div id="loginError" class="error hidden"></div>
+    <button type="submit">登录</button>
+  </form>
+
+  <form id="registerForm" class="hidden">
+    <div class="form-group">
+      <label>用户名</label>
+      <input type="text" name="username" required minlength="2" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" name="password" required minlength="6" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label>确认密码</label>
+      <input type="password" name="confirmPassword" required minlength="6">
+    </div>
+    <div class="form-group">
+      <label>邀请码</label>
+      <input type="text" name="inviteCode" required>
+    </div>
+    <div id="registerError" class="error hidden"></div>
+    <button type="submit">注册</button>
+  </form>
+
+  <div class="toggle">
+    <span id="toggleText">没有账号？</span>
+    <a id="toggleLink">注册</a>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+  if (auth.isLoggedIn()) window.location.href = '/';
+
+  let isRegister = false;
+
+  document.getElementById('toggleLink').addEventListener('click', () => {
+    isRegister = !isRegister;
+    document.getElementById('loginForm').classList.toggle('hidden', isRegister);
+    document.getElementById('registerForm').classList.toggle('hidden', !isRegister);
+    document.getElementById('toggleText').textContent = isRegister ? '已有账号？' : '没有账号？';
+    document.getElementById('toggleLink').textContent = isRegister ? '登录' : '注册';
+  });
+
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(e.target);
+    const errEl = document.getElementById('loginError');
+    try {
+      await auth.login(data.get('username'), data.get('password'));
+      window.location.href = '/';
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.classList.remove('hidden');
+    }
+  });
+
+  document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = new FormData(e.target);
+    const errEl = document.getElementById('registerError');
+    if (data.get('password') !== data.get('confirmPassword')) {
+      errEl.textContent = '两次输入的密码不一致';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    try {
+      await auth.register(data.get('username'), data.get('password'), data.get('inviteCode'));
+      window.location.href = '/';
+    } catch (err) {
+      errEl.textContent = err.message;
+      errEl.classList.remove('hidden');
+    }
+  });
+</script>
+</body>
+</html>
