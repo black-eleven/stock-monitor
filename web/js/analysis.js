@@ -2,7 +2,8 @@ class AnalysisComponent {
   constructor(api) {
     this.api = api;
     this.watchlist = [];
-    this.results = new Map(); // symbol -> analysis result
+    this.results = new Map();
+    this._currentMode = 'sell';
   }
 
   async init() {
@@ -22,6 +23,7 @@ class AnalysisComponent {
           high: parseFloat(k.h),
           low: parseFloat(k.l),
           close: parseFloat(k.cl),
+          volume: parseFloat(k.v || 0),
         });
       }
     }
@@ -33,9 +35,10 @@ class AnalysisComponent {
     const ma60 = calcMA(bars, 60);
     const rsi = calcRSI(bars, 14);
     const macd = calcMACD(bars);
-    const signals = evaluateSignals(bars, { ma5, ma20, ma60 }, rsi, macd);
+    const sellSignals = evaluateSignals(bars, { ma5, ma20, ma60 }, rsi, macd);
+    const buySignals = evaluateBuySignals(bars, { ma5, ma20, ma60 }, rsi, macd);
 
-    this.results.set(symbol, { bars, ma5, ma20, ma60, rsi, macd, signals });
+    this.results.set(symbol, { bars, ma5, ma20, ma60, rsi, macd, signals: sellSignals, buySignals });
   }
 
   async render() {
@@ -43,13 +46,40 @@ class AnalysisComponent {
       .filter(w => !this.results.has(w.symbol))
       .map(w => this.analyze(w.symbol));
     await Promise.all(promises);
-    this._renderList();
+    this._currentMode = 'sell';
+    this._showToggleView();
+  }
+
+  _showToggleView() {
+    const container = document.getElementById('analysisList');
+
+    let html = '<div style="display:flex;gap:8px;margin-bottom:12px;">';
+    html += '<button id="analysisSellBtn" style="flex:1;padding:8px;border:1px solid #30363d;background:' + (this._currentMode === 'sell' ? '#1f6feb' : '#161b22') + ';color:#e6edf3;border-radius:6px;cursor:pointer;font-size:14px;">卖出分析</button>';
+    html += '<button id="analysisBuyBtn" style="flex:1;padding:8px;border:1px solid #30363d;background:' + (this._currentMode === 'buy' ? '#1f6feb' : '#161b22') + ';color:#e6edf3;border-radius:6px;cursor:pointer;font-size:14px;">买入推荐</button>';
+    html += '</div>';
+    html += '<div id="analysisInner"></div>';
+    container.innerHTML = html;
+
+    document.getElementById('analysisSellBtn').addEventListener('click', function() {
+      this._currentMode = 'sell';
+      this._showToggleView();
+    }.bind(this));
+
+    document.getElementById('analysisBuyBtn').addEventListener('click', function() {
+      this._currentMode = 'buy';
+      this._showToggleView();
+    }.bind(this));
+
+    if (this._currentMode === 'buy') {
+      this._renderBuyList();
+    } else {
+      this._renderList();
+    }
   }
 
   _renderList() {
-    const container = document.getElementById('analysisList');
+    const container = document.getElementById('analysisInner');
 
-    // Calculate summary statistics (weighted score)
     let totalScore = 0;
     let totalMaxScore = 0;
     for (const [, result] of this.results) {
@@ -121,7 +151,7 @@ class AnalysisComponent {
   }
 
   _showDetail(symbol) {
-    const container = document.getElementById('analysisList');
+    const container = document.getElementById('analysisInner');
     const result = this.results.get(symbol);
     if (!result) return;
 
@@ -149,16 +179,16 @@ class AnalysisComponent {
       let statusIcon, statusText, color;
 
       if (!signal.triggered) {
-        statusIcon = '🟢'; // 🟢
-        statusText = '正常'; // 正常
+        statusIcon = '🟢';
+        statusText = '正常';
         color = 'green';
       } else if (signal.status === 'danger') {
-        statusIcon = '🔴'; // 🔴
-        statusText = '危险'; // 危险
+        statusIcon = '🔴';
+        statusText = '危险';
         color = 'red';
       } else {
-        statusIcon = '🟡'; // 🟡
-        statusText = '警告'; // 警告
+        statusIcon = '🟡';
+        statusText = '警告';
         color = '#ffd700';
       }
 
@@ -175,7 +205,138 @@ class AnalysisComponent {
     container.innerHTML = html;
 
     document.getElementById('analysisBack').addEventListener('click', function() {
-      this.render();
+      this._renderList();
+    }.bind(this));
+  }
+
+  _renderBuyList() {
+    const container = document.getElementById('analysisInner');
+
+    let totalScore = 0;
+    let totalMaxScore = 0;
+    for (const [, result] of this.results) {
+      totalScore += result.buySignals.score;
+      totalMaxScore += result.buySignals.maxScore;
+    }
+    const avgPct = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+
+    let summaryColor, summaryLabel;
+    if (avgPct >= 50) {
+      summaryColor = '#3fb950';
+      summaryLabel = '强烈推荐买入';
+    } else if (avgPct >= 25) {
+      summaryColor = '#d29922';
+      summaryLabel = '值得关注';
+    } else {
+      summaryColor = '#8b949e';
+      summaryLabel = '暂无明确买入信号';
+    }
+
+    let html = '<div class="analysis-summary" style="color:' + summaryColor + '">买入指数 <strong style="font-size:28px">' + avgPct + '%</strong> — ' + summaryLabel + '</div>';
+    html += '<div class="analysis-cards">';
+
+    for (const w of this.watchlist) {
+      const result = this.results.get(w.symbol);
+      if (!result) continue;
+
+      const pct = Math.round((result.buySignals.score / result.buySignals.maxScore) * 100);
+
+      let pctColor;
+      if (pct >= 50) {
+        pctColor = '#3fb950';
+      } else if (pct >= 25) {
+        pctColor = '#d29922';
+      } else {
+        pctColor = '#8b949e';
+      }
+
+      let cardClass;
+      if (pct >= 50) {
+        cardClass = 'buy-danger';
+      } else if (pct > 0) {
+        cardClass = 'buy-warn';
+      } else {
+        cardClass = '';
+      }
+
+      const latestBar = result.bars[result.bars.length - 1];
+      const price = formatPrice(latestBar.close);
+
+      html += '<div class="analysis-card' + (cardClass ? ' ' + cardClass : '') + '" data-symbol="' + escapeHtml(w.symbol) + '">';
+      html += '<div class="analysis-card-header">';
+      html += '<span class="name">' + escapeHtml(w.name) + '</span>';
+      html += '<span class="symbol">' + escapeHtml(shortCode(w.symbol)) + '</span>';
+      html += '<span class="price">' + escapeHtml(price) + '</span>';
+      html += '</div>';
+      html += '<div class="analysis-card-signals">买入指数 <strong style="font-size:18px;color:' + pctColor + '">' + pct + '%</strong> (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
+      html += '</div>';
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+
+    container.querySelectorAll('.analysis-card').forEach(function(el) {
+      el.addEventListener('click', function() {
+        this._showBuyDetail(el.dataset.symbol);
+      }.bind(this));
+    }, this);
+  }
+
+  _showBuyDetail(symbol) {
+    const container = document.getElementById('analysisInner');
+    const result = this.results.get(symbol);
+    if (!result) return;
+
+    const w = this.watchlist.find(function(item) { return item.symbol === symbol; });
+    const name = w ? w.name : shortCode(symbol);
+    const pct = Math.round((result.buySignals.score / result.buySignals.maxScore) * 100);
+
+    let summaryColor;
+    if (pct >= 50) {
+      summaryColor = '#3fb950';
+    } else if (pct >= 25) {
+      summaryColor = '#d29922';
+    } else {
+      summaryColor = '#8b949e';
+    }
+
+    let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
+    html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
+    html += '<div style="color:' + summaryColor + ';margin:8px 0;">买入指数 <strong style="font-size:24px">' + pct + '%</strong> — ' + escapeHtml(result.buySignals.summary) + ' (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
+
+    html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
+
+    for (const signal of result.buySignals.signals) {
+      let statusIcon, statusText, color;
+
+      if (!signal.triggered) {
+        statusIcon = '⚪';
+        statusText = '未触发';
+        color = '#8b949e';
+      } else if (signal.status === 'danger') {
+        statusIcon = '🟢';
+        statusText = '推荐';
+        color = '#3fb950';
+      } else {
+        statusIcon = '🟡';
+        statusText = '关注';
+        color = '#d29922';
+      }
+
+      const valueStr = signal.value ? escapeHtml(String(signal.value)) : '--';
+
+      html += '<tr>';
+      html += '<td>' + escapeHtml(signal.name) + '</td>';
+      html += '<td style="color:' + color + ';">' + statusIcon + ' ' + escapeHtml(statusText) + '</td>';
+      html += '<td>' + valueStr + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    document.getElementById('analysisBack').addEventListener('click', function() {
+      this._renderBuyList();
     }.bind(this));
   }
 }
