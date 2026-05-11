@@ -1,3 +1,24 @@
+# 依赖
 node_modules/
+
+# 配置
 .env
+
+# 运行时数据
 data/
+
+# 构建产物
+bin/
+
+# 日志
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
