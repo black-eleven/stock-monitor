@@ -22,8 +22,8 @@
         "Bash(npm run build)", "Bash(npm run test:*)",
         "Bash(make)", "Bash(dotnet build)",
         "Bash(cargo build)",
-        "Bash(go build)",
-        "Bash(go test)",
+        "Bash(go build *)",
+        "Bash(go test *)",
         "Bash(npm install)", "Bash(pip install -r requirements.txt)",
         "Bash(./scripts/lint.sh)", "Bash(./scripts/format.sh)"
     ],

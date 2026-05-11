@@ -9,6 +9,7 @@ data/
 
 # 构建产物
 bin/
+migrate
 
 # 日志
 *.log
