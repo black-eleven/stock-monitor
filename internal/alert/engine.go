@@ -36,7 +36,7 @@ type Quote interface {
 }
 
 func (e *Engine) Evaluate(q Quote) {
-	rules, err := e.alertRepo.GetBySymbol(q.GetCode())
+	rules, err := e.alertRepo.GetBySymbolAll(q.GetCode())
 	if err != nil {
 		return
 	}

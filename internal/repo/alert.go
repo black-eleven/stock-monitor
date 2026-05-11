@@ -42,6 +42,32 @@ func (r *AlertRepo) GetAll(userID int) ([]model.AlertRule, error) {
 	return rules, nil
 }
 
+func (r *AlertRepo) GetBySymbolAll(symbol string) ([]model.AlertRule, error) {
+	rows, err := r.db.Query(
+		"SELECT id, symbol, type, value, enabled, created_at, last_triggered_at FROM alerts WHERE symbol = ?",
+		symbol,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var rules []model.AlertRule
+	for rows.Next() {
+		var a model.AlertRule
+		var enabled int
+		if err := rows.Scan(&a.ID, &a.Symbol, &a.Type, &a.Value, &enabled, &a.CreatedAt, &a.LastTriggeredAt); err != nil {
+			return nil, err
+		}
+		a.Enabled = enabled != 0
+		rules = append(rules, a)
+	}
+	if rules == nil {
+		rules = []model.AlertRule{}
+	}
+	return rules, nil
+}
+
 func (r *AlertRepo) GetBySymbol(userID int, symbol string) ([]model.AlertRule, error) {
 	rows, err := r.db.Query(
 		"SELECT id, symbol, type, value, enabled, created_at, last_triggered_at FROM alerts WHERE symbol = ? AND user_id = ?",

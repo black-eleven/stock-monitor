@@ -10,6 +10,7 @@ import (
 	"github.com/black-eleven/stock-monitor/internal/config"
 	"github.com/black-eleven/stock-monitor/internal/db"
 	"github.com/black-eleven/stock-monitor/internal/handler"
+	"github.com/black-eleven/stock-monitor/internal/middleware"
 	"github.com/black-eleven/stock-monitor/internal/model"
 	"github.com/black-eleven/stock-monitor/internal/qos"
 	"github.com/black-eleven/stock-monitor/internal/repo"
@@ -33,10 +34,21 @@ func main() {
 	watchlistRepo := repo.NewWatchlistRepo(database)
 	alertRepo := repo.NewAlertRepo(database)
 	holdingRepo := repo.NewHoldingRepo(database)
+	userRepo := repo.NewUserRepo(database)
+	inviteCodeRepo := repo.NewInviteCodeRepo(database)
 
 	// WebSocket Hub
-	hub := ws.NewHub()
+	hub := ws.NewHub(cfg.JwtSecret)
 	go hub.Run()
+
+	// Init admin user if first run
+	adminID, err := db.InitAdmin(database, cfg.AdminPassword)
+	if err != nil {
+		log.Fatalf("Failed to init admin: %v", err)
+	}
+	if adminID > 0 {
+		log.Printf("[MAIN] Initial admin created (id=%d), password printed in config logs above", adminID)
+	}
 
 	// QOS Client
 	qosClient := qos.NewClient(cfg.QosWsUrl)
@@ -51,38 +63,33 @@ func main() {
 		alertEngine.Evaluate(mq)
 	}
 
-	// Subscribe existing watchlist stocks
-	subscribeWatchlist := func() {
-		items, err := watchlistRepo.GetAll()
-		if err != nil {
-			log.Printf("Failed to get watchlist for subscription: %v", err)
-			return
-		}
-		if len(items) > 0 {
-			codes := make([]string, len(items))
-			for i, item := range items {
-				codes[i] = item.Symbol
-			}
-			qosClient.Subscribe(codes)
-			log.Printf("Subscribed %d watchlist stocks", len(codes))
-		}
-	}
-	subscribeWatchlist()
-
 	// HTTP handlers
-	watchlistH := handler.NewWatchlistHandler(watchlistRepo, subscribeWatchlist)
+	watchlistH := handler.NewWatchlistHandler(watchlistRepo, nil)
 	alertH := handler.NewAlertHandler(alertRepo)
 	holdingH := handler.NewHoldingHandler(holdingRepo)
 	quoteH := handler.NewQuoteHandler(qosClient)
 	klineH := handler.NewKlineHandler(qosClient)
+	authH := handler.NewAuthHandler(userRepo, inviteCodeRepo, cfg.JwtSecret)
+	adminH := handler.NewAdminHandler(inviteCodeRepo)
 
 	r := gin.Default()
 	api := r.Group("/api")
-	watchlistH.Register(api)
-	alertH.Register(api)
-	holdingH.Register(api)
-	quoteH.Register(api)
-	klineH.Register(api)
+
+	// Public routes — no auth required
+	authH.Register(api)
+
+	// Protected routes — JWT required
+	authMW := middleware.AuthMiddleware(cfg.JwtSecret)
+	auth := api.Group("", authMW)
+	watchlistH.Register(auth)
+	alertH.Register(auth)
+	holdingH.Register(auth)
+	quoteH.Register(auth)
+	klineH.Register(auth)
+
+	// Admin routes
+	admin := auth.Group("/admin", middleware.AdminRequired())
+	adminH.Register(admin)
 
 	// WebSocket endpoint
 	r.GET("/ws", func(c *gin.Context) { hub.ServeWS(c.Writer, c.Request) })
