@@ -84,6 +84,12 @@ func (h *Hub) sendSnapshot(client *Client) {
 
 func (h *Hub) BroadcastQuote(quote interface{}) {
 	data, _ := json.Marshal(quote)
+	// Store in cache so new clients receive it in snapshot
+	var tmp struct{ Code string `json:"code"` }
+	json.Unmarshal(data, &tmp)
+	if tmp.Code != "" {
+		h.quotes.Store(tmp.Code, json.RawMessage(data))
+	}
 	msg, _ := json.Marshal(map[string]interface{}{
 		"type": "quote",
 		"data": json.RawMessage(data),

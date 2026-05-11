@@ -60,6 +60,14 @@ async function init() {
   // Update kline symbols from watchlist
   klineComp.updateSymbols(watchlistComp.watchlist);
 
+  // Handle initial snapshot
+  api.on('snapshot', (quotes) => {
+    for (const quote of quotes) {
+      watchlistComp.updateQuote(quote);
+      holdingsComp.updateQuote(quote);
+    }
+  });
+
   // Handle real-time quotes
   api.on('quote', (quote) => {
     watchlistComp.updateQuote(quote);

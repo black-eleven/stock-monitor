@@ -12,6 +12,20 @@ class WatchlistComponent {
     this.watchlist = await this.api.getWatchlist();
     document.getElementById('addWatchlistBtn').addEventListener('click', () => this._showAddDialog());
     this.renderTabs();
+
+    // Fetch initial quotes from REST API (fallback for when WS snapshot hasn't arrived yet)
+    if (this.watchlist.length > 0) {
+      try {
+        const symbols = this.watchlist.map(w => w.symbol);
+        const quotes = await this.api.get('/api/quote/batch?symbols=' + symbols.join(','));
+        for (const [code, q] of Object.entries(quotes)) {
+          if (q && q.code) this.quotes[code] = q;
+        }
+      } catch (err) {
+        console.error('Failed to fetch initial quotes:', err);
+      }
+    }
+
     if (this.watchlist.length > 0) {
       this.selectStock(this.watchlist[0].symbol);
     }

@@ -10,11 +10,12 @@ import (
 )
 
 type WatchlistHandler struct {
-	repo *repo.WatchlistRepo
+	repo      *repo.WatchlistRepo
+	onChanged func()
 }
 
-func NewWatchlistHandler(r *repo.WatchlistRepo) *WatchlistHandler {
-	return &WatchlistHandler{repo: r}
+func NewWatchlistHandler(r *repo.WatchlistRepo, onChanged func()) *WatchlistHandler {
+	return &WatchlistHandler{repo: r, onChanged: onChanged}
 }
 
 func (h *WatchlistHandler) Register(api *gin.RouterGroup) {
@@ -53,6 +54,9 @@ func (h *WatchlistHandler) add(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add"})
 		return
+	}
+	if h.onChanged != nil {
+		h.onChanged()
 	}
 	c.JSON(http.StatusCreated, item)
 }

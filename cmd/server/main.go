@@ -51,8 +51,26 @@ func main() {
 		alertEngine.Evaluate(mq)
 	}
 
+	// Subscribe existing watchlist stocks
+	subscribeWatchlist := func() {
+		items, err := watchlistRepo.GetAll()
+		if err != nil {
+			log.Printf("Failed to get watchlist for subscription: %v", err)
+			return
+		}
+		if len(items) > 0 {
+			codes := make([]string, len(items))
+			for i, item := range items {
+				codes[i] = item.Symbol
+			}
+			qosClient.Subscribe(codes)
+			log.Printf("Subscribed %d watchlist stocks", len(codes))
+		}
+	}
+	subscribeWatchlist()
+
 	// HTTP handlers
-	watchlistH := handler.NewWatchlistHandler(watchlistRepo)
+	watchlistH := handler.NewWatchlistHandler(watchlistRepo, subscribeWatchlist)
 	alertH := handler.NewAlertHandler(alertRepo)
 	holdingH := handler.NewHoldingHandler(holdingRepo)
 	quoteH := handler.NewQuoteHandler(qosClient)

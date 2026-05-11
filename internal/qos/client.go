@@ -103,7 +103,7 @@ func (c *QosClient) Connect() {
 
 		// Re-subscribe after reconnect
 		if len(c.subscribedCodes) > 0 {
-			c.subscribe(c.subscribedCodes)
+			c.Subscribe(c.subscribedCodes)
 		}
 
 		go c.readLoop(conn)
@@ -213,7 +213,7 @@ func (c *QosClient) Send(data []byte) error {
 	return c.send(data)
 }
 
-func (c *QosClient) subscribe(codes []string) {
+func (c *QosClient) Subscribe(codes []string) {
 	c.subscribedCodes = append([]string{}, codes...)
 	if c.connected.Load() {
 		if err := c.sendJSON(map[string]interface{}{"type": "S", "codes": []string{joinCodes(codes)}}); err != nil {

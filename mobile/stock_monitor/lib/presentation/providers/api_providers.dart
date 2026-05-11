@@ -14,6 +14,7 @@ final quoteApiProvider = Provider((ref) => QuoteApi(ref.watch(apiClientProvider)
 
 final wsClientProvider = Provider<WsClient>((ref) {
   final ws = WsClient();
+  ws.connect();
   ref.onDispose(() => ws.dispose());
   return ws;
 });
