@@ -25,6 +25,7 @@ func main() {
 	}
 	defer database.Close()
 
+	migrateUserIDColumn(database)
 	migrateWatchlist(database)
 	migrateHoldings(database)
 	migrateAlerts(database)
@@ -44,7 +45,7 @@ func migrateWatchlist(database *sql.DB) {
 		return
 	}
 	for _, item := range items {
-		if err := r.Add(item); err != nil {
+		if err := r.Add(0, item); err != nil {
 			fmt.Printf("watchlist skip %s: %v\n", item.Symbol, err)
 		} else {
 			fmt.Printf("watchlist added: %s\n", item.Symbol)
@@ -64,7 +65,7 @@ func migrateHoldings(database *sql.DB) {
 		return
 	}
 	for _, h := range items {
-		if err := r.Add(h); err != nil {
+		if err := r.Add(0, h); err != nil {
 			fmt.Printf("holdings skip %s: %v\n", h.Symbol, err)
 		} else {
 			fmt.Printf("holdings added: %s\n", h.Symbol)
@@ -84,10 +85,26 @@ func migrateAlerts(database *sql.DB) {
 		return
 	}
 	for _, a := range items {
-		if _, err := r.Add(a); err != nil {
+		if _, err := r.Add(0, a); err != nil {
 			fmt.Printf("alerts skip %s: %v\n", a.Symbol, err)
 		} else {
 			fmt.Printf("alerts added: %s (%s)\n", a.Symbol, a.Type)
+		}
+	}
+}
+
+func migrateUserIDColumn(database *sql.DB) {
+	alterStatements := []string{
+		"ALTER TABLE watchlist ADD COLUMN user_id INTEGER DEFAULT 0",
+		"ALTER TABLE holdings ADD COLUMN user_id INTEGER DEFAULT 0",
+		"ALTER TABLE alerts ADD COLUMN user_id INTEGER DEFAULT 0",
+	}
+	for _, stmt := range alterStatements {
+		_, err := database.Exec(stmt)
+		if err != nil {
+			fmt.Printf("migration note: %v (column may already exist)\n", err)
+		} else {
+			fmt.Printf("migrated: %s\n", stmt)
 		}
 	}
 }
