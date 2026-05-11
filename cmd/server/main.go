@@ -99,6 +99,8 @@ func main() {
 	r.Static("/js", "./web/js")
 	r.StaticFile("/", "./web/index.html")
 	r.StaticFile("/index.html", "./web/index.html")
+	r.StaticFile("/login.html", "./web/login.html")
+	r.StaticFile("/admin.html", "./web/admin.html")
 
 	go func() {
 		log.Printf("Starting server on :%s", cfg.Port)
