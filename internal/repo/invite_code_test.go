@@ -13,7 +13,7 @@ func setupInviteCodeRepo(t *testing.T) (*InviteCodeRepo, *UserRepo) {
 		t.Fatalf("failed to open db: %v", err)
 	}
 	t.Cleanup(func() { database.Close() })
-	db.InitAdmin(database, "testpass123")
+	db.InitAdmin(database, "testpass123", false)
 	return NewInviteCodeRepo(database), NewUserRepo(database)
 }
 

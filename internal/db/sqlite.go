@@ -108,19 +108,25 @@ func generateInviteCode() string {
 	return hex.EncodeToString(b)
 }
 
-func InitAdmin(database *sql.DB, password string) (int, error) {
-	var count int
-	database.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'admin'").Scan(&count)
-	if count > 0 {
-		return 0, nil // admin already exists
-	}
-
+func InitAdmin(database *sql.DB, password string, explicitPassword bool) (int, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	if err != nil {
 		return 0, fmt.Errorf("bcrypt: %w", err)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	var count int
+	database.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'admin'").Scan(&count)
+
+	if count > 0 {
+		// Admin exists — update password if explicitly set via env
+		if explicitPassword {
+			database.Exec("UPDATE users SET password = ? WHERE role = 'admin'", string(hash))
+			log.Printf("[DB] Admin password updated from ADMIN_PASSWORD env var")
+		}
+		return 0, nil
+	}
+
 	result, err := database.Exec(
 		"INSERT INTO users (username, password, role, created_at) VALUES (?, ?, 'admin', ?)",
 		"admin", string(hash), now,

@@ -13,8 +13,9 @@ type Config struct {
 	QosKey         string
 	DataDir        string
 	QosWsUrl       string
-	JwtSecret      string
-	AdminPassword  string
+	JwtSecret             string
+	AdminPassword          string
+	ExplicitAdminPassword  bool
 }
 
 func Load() *Config {
@@ -39,6 +40,7 @@ func Load() *Config {
 		log.Printf("[CONFIG] JWT_SECRET not set, generated random secret (first 8 chars): %s...", jwtSecret[:8])
 	}
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	explicitAdminPassword := adminPassword != ""
 	if adminPassword == "" {
 		adminPassword = generateRandomSecret(16)
 		log.Printf("[CONFIG] ADMIN_PASSWORD not set, generated: %s", adminPassword)
@@ -50,7 +52,8 @@ func Load() *Config {
 		DataDir:       absDataDir,
 		QosWsUrl:      qosWsUrl,
 		JwtSecret:     jwtSecret,
-		AdminPassword: adminPassword,
+		AdminPassword:          adminPassword,
+		ExplicitAdminPassword:  explicitAdminPassword,
 	}
 }
 

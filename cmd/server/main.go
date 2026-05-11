@@ -42,7 +42,7 @@ func main() {
 	go hub.Run()
 
 	// Init admin user if first run
-	adminID, err := db.InitAdmin(database, cfg.AdminPassword)
+	adminID, err := db.InitAdmin(database, cfg.AdminPassword, cfg.ExplicitAdminPassword)
 	if err != nil {
 		log.Fatalf("Failed to init admin: %v", err)
 	}
