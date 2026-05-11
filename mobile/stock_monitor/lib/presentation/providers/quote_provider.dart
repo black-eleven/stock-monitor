@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/ws/ws_client.dart';
 import '../../domain/model/stock.dart';
 import 'api_providers.dart';
 

@@ -13,7 +13,7 @@ class AlertsScreen extends ConsumerStatefulWidget {
 
 class _AlertsScreenState extends ConsumerState<AlertsScreen> {
   List<AlertRule>? _rules;
-  final List<AlertEvent> _logs = [];
+  final List<AlertLog> _logs = [];
 
   @override
   void initState() {

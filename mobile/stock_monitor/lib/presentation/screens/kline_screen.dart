@@ -47,7 +47,7 @@ class _KlineScreenState extends ConsumerState<KlineScreen> {
       final allBars = <Bar>[];
       for (final item in data) {
         for (final k in item.k) {
-          allBars.add(Bar(time: k.ts, open: k.o, high: k.h, low: k.l, close: k.cl));
+          allBars.add(Bar(time: k.ts, open: k.o, high: k.h, low: k.l, close: k.cl, volume: k.v));
         }
       }
       allBars.sort((a, b) => a.time.compareTo(b.time));

@@ -58,7 +58,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen> {
   }
 
   void _showDetail(WatchlistItem item) {
-    final quote = ref.read(quoteProvider).getQuote(item.symbol);
+    final quote = ref.read(quoteProvider).quotes[item.symbol];
     if (quote == null) return;
     showModalBottomSheet(
       context: context,
