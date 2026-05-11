@@ -22,6 +22,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 // Init all components
 async function init() {
+  // Auth guard
+  if (!auth.isLoggedIn()) {
+    window.location.href = '/login.html';
+    return;
+  }
+
   // Connection status
   api.on('connected', () => {
     document.getElementById('connStatus').textContent = '已连接';
@@ -31,6 +37,12 @@ async function init() {
     document.getElementById('connStatus').textContent = '已断开';
     document.getElementById('connStatus').className = 'connection-status disconnected';
   });
+
+  // Admin link visibility
+  if (auth.isAdmin()) {
+    const adminLink = document.getElementById('adminLink');
+    if (adminLink) adminLink.style.display = 'inline';
+  }
 
   // Connect WebSocket
   api.connectWs();
@@ -130,6 +142,9 @@ function showToast(message, type = '') {
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 5000);
 }
+
+// Logout
+document.getElementById('logoutBtn').addEventListener('click', () => auth.logout());
 
 // Start
 document.addEventListener('DOMContentLoaded', init);
