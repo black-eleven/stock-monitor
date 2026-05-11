@@ -17,17 +17,21 @@ import (
 
 const schema = `
 CREATE TABLE IF NOT EXISTS watchlist (
-    symbol   TEXT PRIMARY KEY,
+    symbol   TEXT NOT NULL,
     name     TEXT NOT NULL,
-    added_at TEXT NOT NULL
+    added_at TEXT NOT NULL,
+    user_id  INTEGER DEFAULT 0,
+    PRIMARY KEY (symbol, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS holdings (
-    symbol   TEXT PRIMARY KEY,
+    symbol   TEXT NOT NULL,
     name     TEXT NOT NULL,
     shares   REAL NOT NULL,
     avg_cost REAL NOT NULL,
-    buy_date TEXT
+    buy_date TEXT,
+    user_id  INTEGER DEFAULT 0,
+    PRIMARY KEY (symbol, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS alerts (
@@ -99,6 +103,16 @@ func Open(dataDir string) (*sql.DB, error) {
 		db.Exec(m) // ignore errors (column may already exist)
 	}
 
+
+		// Migration: rebuild tables with composite PK (symbol, user_id) for multi-user
+		migrateCompositePK(db, "watchlist",
+			"CREATE TABLE watchlist_new (symbol TEXT NOT NULL, name TEXT NOT NULL, added_at TEXT NOT NULL, user_id INTEGER DEFAULT 0, PRIMARY KEY (symbol, user_id))",
+			"symbol, name, added_at, COALESCE(user_id, 0)",
+		)
+		migrateCompositePK(db, "holdings",
+			"CREATE TABLE holdings_new (symbol TEXT NOT NULL, name TEXT NOT NULL, shares REAL NOT NULL, avg_cost REAL NOT NULL, buy_date TEXT, user_id INTEGER DEFAULT 0, PRIMARY KEY (symbol, user_id))",
+			"symbol, name, shares, avg_cost, buy_date, COALESCE(user_id, 0)",
+		)
 	return db, nil
 }
 
@@ -144,4 +158,39 @@ func InitAdmin(database *sql.DB, password string, explicitPassword bool) (int, e
 	log.Printf("[DB] Created admin user. Initial invite code: %s", code)
 
 	return int(id), nil
+}
+
+// migrateCompositePK rebuilds a table with a composite primary key (col, user_id).
+// SQLite does not support ALTER TABLE to change PKs, so we recreate the table.
+func migrateCompositePK(database *sql.DB, tableName, createNewSQL, copyColumns string) {
+	// Check if migration is needed by looking for user_id in the PK
+	rows, err := database.Query("SELECT name FROM pragma_table_info(? || '_new')", tableName)
+	if err == nil {
+		rows.Close()
+		return // new table already exists, migration done
+	}
+
+	// Check if current table already has composite PK
+	pkCount := 0
+	infoRows, err := database.Query("SELECT pk FROM pragma_table_info(?) WHERE pk > 0", tableName)
+	if err != nil {
+		return
+	}
+	for infoRows.Next() {
+		pkCount++
+	}
+	infoRows.Close()
+	if pkCount > 1 {
+		return // already composite PK
+	}
+
+	// Rebuild: create new table -> copy data -> drop old -> rename new
+	if _, err := database.Exec(createNewSQL); err != nil {
+		log.Printf("[DB] migrate %s: create new table: %v", tableName, err)
+		return
+	}
+	database.Exec("INSERT INTO " + tableName + "_new (" + copyColumns + ") SELECT " + copyColumns + " FROM " + tableName)
+	database.Exec("DROP TABLE " + tableName)
+	database.Exec("ALTER TABLE " + tableName + "_new RENAME TO " + tableName)
+	log.Printf("[DB] Migrated %s to composite PK (col, user_id)", tableName)
 }
