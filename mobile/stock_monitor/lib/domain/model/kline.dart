@@ -32,5 +32,6 @@ class Bar {
   final double high;
   final double low;
   final double close;
-  Bar({required this.time, required this.open, required this.high, required this.low, required this.close});
+  final double volume;
+  Bar({required this.time, required this.open, required this.high, required this.low, required this.close, required this.volume});
 }
