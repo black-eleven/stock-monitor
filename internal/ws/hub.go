@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
 
@@ -20,14 +21,16 @@ type Hub struct {
 	broadcast  chan []byte
 	mu         sync.RWMutex
 	quotes     sync.Map
+	jwtSecret  string
 }
 
-func NewHub() *Hub {
+func NewHub(jwtSecret string) *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		broadcast:  make(chan []byte, 256),
+		jwtSecret:  jwtSecret,
 	}
 }
 
@@ -106,7 +109,23 @@ func (h *Hub) BroadcastAlert(alert interface{}) {
 	h.broadcast <- msg
 }
 
+func (h *Hub) validateToken(tokenStr string) bool {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(h.jwtSecret), nil
+	})
+	return err == nil && token.Valid
+}
+
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if token == "" || !h.validateToken(token) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("[WS] Upgrade error: %v", err)
