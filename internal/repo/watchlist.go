@@ -21,8 +21,8 @@ func NewWatchlistRepo(db *sql.DB) *WatchlistRepo {
 	return &WatchlistRepo{db: db}
 }
 
-func (r *WatchlistRepo) GetAll() ([]model.WatchlistItem, error) {
-	rows, err := r.db.Query("SELECT symbol, name, added_at FROM watchlist ORDER BY added_at DESC")
+func (r *WatchlistRepo) GetAll(userID int) ([]model.WatchlistItem, error) {
+	rows, err := r.db.Query("SELECT symbol, name, added_at FROM watchlist WHERE user_id = ? ORDER BY added_at DESC", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -42,10 +42,10 @@ func (r *WatchlistRepo) GetAll() ([]model.WatchlistItem, error) {
 	return items, nil
 }
 
-func (r *WatchlistRepo) Add(item model.WatchlistItem) error {
+func (r *WatchlistRepo) Add(userID int, item model.WatchlistItem) error {
 	_, err := r.db.Exec(
-		"INSERT INTO watchlist (symbol, name, added_at) VALUES (?, ?, ?)",
-		item.Symbol, item.Name, item.AddedAt,
+		"INSERT INTO watchlist (symbol, name, added_at, user_id) VALUES (?, ?, ?, ?)",
+		item.Symbol, item.Name, item.AddedAt, userID,
 	)
 	if err != nil {
 		var sqliteErr sqlite3.Error
@@ -57,8 +57,8 @@ func (r *WatchlistRepo) Add(item model.WatchlistItem) error {
 	return nil
 }
 
-func (r *WatchlistRepo) Remove(symbol string) error {
-	result, err := r.db.Exec("DELETE FROM watchlist WHERE symbol = ?", symbol)
+func (r *WatchlistRepo) Remove(userID int, symbol string) error {
+	result, err := r.db.Exec("DELETE FROM watchlist WHERE symbol = ? AND user_id = ?", symbol, userID)
 	if err != nil {
 		return err
 	}

@@ -16,9 +16,10 @@ func NewAlertRepo(db *sql.DB) *AlertRepo {
 	return &AlertRepo{db: db}
 }
 
-func (r *AlertRepo) GetAll() ([]model.AlertRule, error) {
+func (r *AlertRepo) GetAll(userID int) ([]model.AlertRule, error) {
 	rows, err := r.db.Query(
-		"SELECT id, symbol, type, value, enabled, created_at, last_triggered_at FROM alerts ORDER BY id",
+		"SELECT id, symbol, type, value, enabled, created_at, last_triggered_at FROM alerts WHERE user_id = ? ORDER BY id",
+		userID,
 	)
 	if err != nil {
 		return nil, err
@@ -41,10 +42,10 @@ func (r *AlertRepo) GetAll() ([]model.AlertRule, error) {
 	return rules, nil
 }
 
-func (r *AlertRepo) GetBySymbol(symbol string) ([]model.AlertRule, error) {
+func (r *AlertRepo) GetBySymbol(userID int, symbol string) ([]model.AlertRule, error) {
 	rows, err := r.db.Query(
-		"SELECT id, symbol, type, value, enabled, created_at, last_triggered_at FROM alerts WHERE symbol = ?",
-		symbol,
+		"SELECT id, symbol, type, value, enabled, created_at, last_triggered_at FROM alerts WHERE symbol = ? AND user_id = ?",
+		symbol, userID,
 	)
 	if err != nil {
 		return nil, err
@@ -67,14 +68,14 @@ func (r *AlertRepo) GetBySymbol(symbol string) ([]model.AlertRule, error) {
 	return rules, nil
 }
 
-func (r *AlertRepo) Add(rule model.AlertRule) (int, error) {
+func (r *AlertRepo) Add(userID int, rule model.AlertRule) (int, error) {
 	enabled := 0
 	if rule.Enabled {
 		enabled = 1
 	}
 	result, err := r.db.Exec(
-		"INSERT INTO alerts (symbol, type, value, enabled, created_at, last_triggered_at) VALUES (?, ?, ?, ?, ?, ?)",
-		rule.Symbol, rule.Type, rule.Value, enabled, rule.CreatedAt, rule.LastTriggeredAt,
+		"INSERT INTO alerts (symbol, type, value, enabled, created_at, last_triggered_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		rule.Symbol, rule.Type, rule.Value, enabled, rule.CreatedAt, rule.LastTriggeredAt, userID,
 	)
 	if err != nil {
 		var sqliteErr sqlite3.Error
@@ -88,25 +89,26 @@ func (r *AlertRepo) Add(rule model.AlertRule) (int, error) {
 }
 
 func (r *AlertRepo) Update(id int, fn func(*model.AlertRule)) error {
-	rules, err := r.GetAll()
-	if err != nil {
-		return err
+	row := r.db.QueryRow(
+		"SELECT id, symbol, type, value, enabled, created_at, last_triggered_at FROM alerts WHERE id = ?",
+		id,
+	)
+	var a model.AlertRule
+	var enabled int
+	if err := row.Scan(&a.ID, &a.Symbol, &a.Type, &a.Value, &enabled, &a.CreatedAt, &a.LastTriggeredAt); err != nil {
+		return ErrNotFound
 	}
-	for i, a := range rules {
-		if a.ID == id {
-			fn(&rules[i])
-			enabled := 0
-			if rules[i].Enabled {
-				enabled = 1
-			}
-			_, err = r.db.Exec(
-				"UPDATE alerts SET type=?, value=?, enabled=?, last_triggered_at=? WHERE id=?",
-				rules[i].Type, rules[i].Value, enabled, rules[i].LastTriggeredAt, id,
-			)
-			return err
-		}
+	a.Enabled = enabled != 0
+	fn(&a)
+	enabled = 0
+	if a.Enabled {
+		enabled = 1
 	}
-	return ErrNotFound
+	_, err := r.db.Exec(
+		"UPDATE alerts SET type=?, value=?, enabled=?, last_triggered_at=? WHERE id=?",
+		a.Type, a.Value, enabled, a.LastTriggeredAt, id,
+	)
+	return err
 }
 
 func (r *AlertRepo) Remove(id int) error {

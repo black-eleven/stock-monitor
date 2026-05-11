@@ -23,7 +23,7 @@ func TestAlertCRUD(t *testing.T) {
 		Symbol: "HK:700", Type: "above", Value: 500,
 		Enabled: true, CreatedAt: nowISO(),
 	}
-	id, err := r.Add(rule)
+	id, err := r.Add(1, rule)
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestAlertCRUD(t *testing.T) {
 		t.Errorf("expected id=1, got %d", id)
 	}
 
-	all, err := r.GetAll()
+	all, err := r.GetAll(1)
 	if err != nil {
 		t.Fatalf("getall: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestAlertCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	updated, err := r.GetBySymbol("HK:700")
+	updated, err := r.GetBySymbol(1, "HK:700")
 	if err != nil {
 		t.Fatalf("getBySymbol: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestAlertCRUD(t *testing.T) {
 	if err := r.Remove(1); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	all, _ = r.GetAll()
+	all, _ = r.GetAll(1)
 	if len(all) != 0 {
 		t.Errorf("expected empty after delete, got %d", len(all))
 	}

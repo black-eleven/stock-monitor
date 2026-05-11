@@ -20,10 +20,10 @@ func setupWatchlistRepo(t *testing.T) *WatchlistRepo {
 func TestAddAndGetAll(t *testing.T) {
 	r := setupWatchlistRepo(t)
 	item := model.WatchlistItem{Symbol: "HK:700", Name: "Tencent", AddedAt: nowISO()}
-	if err := r.Add(item); err != nil {
+	if err := r.Add(1, item); err != nil {
 		t.Fatalf("add: %v", err)
 	}
-	all, err := r.GetAll()
+	all, err := r.GetAll(1)
 	if err != nil {
 		t.Fatalf("getall: %v", err)
 	}
@@ -35,8 +35,8 @@ func TestAddAndGetAll(t *testing.T) {
 func TestAddDuplicate(t *testing.T) {
 	r := setupWatchlistRepo(t)
 	item := model.WatchlistItem{Symbol: "HK:700", Name: "Tencent", AddedAt: nowISO()}
-	r.Add(item)
-	err := r.Add(item)
+	r.Add(1, item)
+	err := r.Add(1, item)
 	if err != ErrDuplicate {
 		t.Errorf("expected ErrDuplicate, got %v", err)
 	}
@@ -44,11 +44,11 @@ func TestAddDuplicate(t *testing.T) {
 
 func TestRemove(t *testing.T) {
 	r := setupWatchlistRepo(t)
-	r.Add(model.WatchlistItem{Symbol: "HK:700", Name: "Tencent", AddedAt: nowISO()})
-	if err := r.Remove("HK:700"); err != nil {
+	r.Add(1, model.WatchlistItem{Symbol: "HK:700", Name: "Tencent", AddedAt: nowISO()})
+	if err := r.Remove(1, "HK:700"); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	all, _ := r.GetAll()
+	all, _ := r.GetAll(1)
 	if len(all) != 0 {
 		t.Errorf("expected empty, got %+v", all)
 	}
@@ -56,7 +56,7 @@ func TestRemove(t *testing.T) {
 
 func TestRemoveNotFound(t *testing.T) {
 	r := setupWatchlistRepo(t)
-	err := r.Remove("NONEXIST")
+	err := r.Remove(1, "NONEXIST")
 	if err != ErrNotFound {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}

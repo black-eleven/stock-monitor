@@ -16,8 +16,8 @@ func NewHoldingRepo(db *sql.DB) *HoldingRepo {
 	return &HoldingRepo{db: db}
 }
 
-func (r *HoldingRepo) GetAll() ([]model.Holding, error) {
-	rows, err := r.db.Query("SELECT symbol, name, shares, avg_cost, buy_date FROM holdings ORDER BY symbol")
+func (r *HoldingRepo) GetAll(userID int) ([]model.Holding, error) {
+	rows, err := r.db.Query("SELECT symbol, name, shares, avg_cost, buy_date FROM holdings WHERE user_id = ? ORDER BY symbol", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -39,10 +39,10 @@ func (r *HoldingRepo) GetAll() ([]model.Holding, error) {
 	return items, nil
 }
 
-func (r *HoldingRepo) Add(h model.Holding) error {
+func (r *HoldingRepo) Add(userID int, h model.Holding) error {
 	_, err := r.db.Exec(
-		"INSERT INTO holdings (symbol, name, shares, avg_cost, buy_date) VALUES (?, ?, ?, ?, ?)",
-		h.Symbol, h.Name, h.Shares, h.AvgCost, h.BuyDate,
+		"INSERT INTO holdings (symbol, name, shares, avg_cost, buy_date, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+		h.Symbol, h.Name, h.Shares, h.AvgCost, h.BuyDate, userID,
 	)
 	if err != nil {
 		var sqliteErr sqlite3.Error
@@ -54,8 +54,8 @@ func (r *HoldingRepo) Add(h model.Holding) error {
 	return nil
 }
 
-func (r *HoldingRepo) Update(symbol string, fn func(*model.Holding)) error {
-	items, err := r.GetAll()
+func (r *HoldingRepo) Update(userID int, symbol string, fn func(*model.Holding)) error {
+	items, err := r.GetAll(userID)
 	if err != nil {
 		return err
 	}
@@ -63,8 +63,8 @@ func (r *HoldingRepo) Update(symbol string, fn func(*model.Holding)) error {
 		if h.Symbol == symbol {
 			fn(&items[i])
 			_, err = r.db.Exec(
-				"UPDATE holdings SET shares=?, avg_cost=?, buy_date=?, name=? WHERE symbol=?",
-				items[i].Shares, items[i].AvgCost, items[i].BuyDate, items[i].Name, symbol,
+				"UPDATE holdings SET shares=?, avg_cost=?, buy_date=?, name=? WHERE symbol=? AND user_id=?",
+				items[i].Shares, items[i].AvgCost, items[i].BuyDate, items[i].Name, symbol, userID,
 			)
 			return err
 		}
@@ -72,8 +72,8 @@ func (r *HoldingRepo) Update(symbol string, fn func(*model.Holding)) error {
 	return ErrNotFound
 }
 
-func (r *HoldingRepo) Remove(symbol string) error {
-	result, err := r.db.Exec("DELETE FROM holdings WHERE symbol = ?", symbol)
+func (r *HoldingRepo) Remove(userID int, symbol string) error {
+	result, err := r.db.Exec("DELETE FROM holdings WHERE symbol = ? AND user_id = ?", symbol, userID)
 	if err != nil {
 		return err
 	}
