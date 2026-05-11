@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/black-eleven/stock-monitor/internal/middleware"
 	"github.com/black-eleven/stock-monitor/internal/model"
 	"github.com/black-eleven/stock-monitor/internal/repo"
 	"github.com/gin-gonic/gin"
@@ -25,7 +26,8 @@ func (h *HoldingHandler) Register(api *gin.RouterGroup) {
 }
 
 func (h *HoldingHandler) getAll(c *gin.Context) {
-	items, err := h.repo.GetAll()
+	userID := middleware.GetUserID(c)
+	items, err := h.repo.GetAll(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch holdings"})
 		return
@@ -34,6 +36,7 @@ func (h *HoldingHandler) getAll(c *gin.Context) {
 }
 
 func (h *HoldingHandler) add(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	var req struct {
 		Symbol  string  `json:"symbol"`
 		Name    string  `json:"name"`
@@ -55,7 +58,7 @@ func (h *HoldingHandler) add(c *gin.Context) {
 		AvgCost: req.AvgCost,
 		BuyDate: req.BuyDate,
 	}
-	if err := h.repo.Add(item); err != nil {
+	if err := h.repo.Add(userID, item); err != nil {
 		if err == repo.ErrDuplicate {
 			c.JSON(http.StatusConflict, gin.H{"error": "Holding already exists for this symbol"})
 			return
@@ -67,13 +70,14 @@ func (h *HoldingHandler) add(c *gin.Context) {
 }
 
 func (h *HoldingHandler) update(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	symbol := c.Param("symbol")
 	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid body"})
 		return
 	}
-	err := h.repo.Update(symbol, func(h *model.Holding) {
+	err := h.repo.Update(userID, symbol, func(h *model.Holding) {
 		if v, ok := req["shares"]; ok {
 			h.Shares = v.(float64)
 		}
@@ -99,8 +103,9 @@ func (h *HoldingHandler) update(c *gin.Context) {
 }
 
 func (h *HoldingHandler) remove(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	symbol := c.Param("symbol")
-	if err := h.repo.Remove(symbol); err != nil {
+	if err := h.repo.Remove(userID, symbol); err != nil {
 		if err == repo.ErrNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Holding not found"})
 			return

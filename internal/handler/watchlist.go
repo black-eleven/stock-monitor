@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/black-eleven/stock-monitor/internal/middleware"
 	"github.com/black-eleven/stock-monitor/internal/model"
 	"github.com/black-eleven/stock-monitor/internal/repo"
 	"github.com/gin-gonic/gin"
@@ -25,7 +26,8 @@ func (h *WatchlistHandler) Register(api *gin.RouterGroup) {
 }
 
 func (h *WatchlistHandler) getAll(c *gin.Context) {
-	items, err := h.repo.GetAll()
+	userID := middleware.GetUserID(c)
+	items, err := h.repo.GetAll(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch watchlist"})
 		return
@@ -34,6 +36,7 @@ func (h *WatchlistHandler) getAll(c *gin.Context) {
 }
 
 func (h *WatchlistHandler) add(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	var req struct {
 		Symbol string `json:"symbol"`
 		Name   string `json:"name"`
@@ -47,7 +50,7 @@ func (h *WatchlistHandler) add(c *gin.Context) {
 		Name:    req.Name,
 		AddedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	if err := h.repo.Add(item); err != nil {
+	if err := h.repo.Add(userID, item); err != nil {
 		if err == repo.ErrDuplicate {
 			c.JSON(http.StatusConflict, gin.H{"error": "Symbol already exists"})
 			return
@@ -62,8 +65,9 @@ func (h *WatchlistHandler) add(c *gin.Context) {
 }
 
 func (h *WatchlistHandler) remove(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	symbol := c.Param("symbol")
-	if err := h.repo.Remove(symbol); err != nil {
+	if err := h.repo.Remove(userID, symbol); err != nil {
 		if err == repo.ErrNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Symbol not found"})
 			return

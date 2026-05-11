@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/black-eleven/stock-monitor/internal/middleware"
 	"github.com/black-eleven/stock-monitor/internal/model"
 	"github.com/black-eleven/stock-monitor/internal/repo"
 	"github.com/gin-gonic/gin"
@@ -26,7 +27,8 @@ func (h *AlertHandler) Register(api *gin.RouterGroup) {
 }
 
 func (h *AlertHandler) getAll(c *gin.Context) {
-	rules, err := h.repo.GetAll()
+	userID := middleware.GetUserID(c)
+	rules, err := h.repo.GetAll(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch alerts"})
 		return
@@ -35,6 +37,7 @@ func (h *AlertHandler) getAll(c *gin.Context) {
 }
 
 func (h *AlertHandler) add(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	var req struct {
 		Symbol string  `json:"symbol"`
 		Type   string  `json:"type"`
@@ -55,7 +58,7 @@ func (h *AlertHandler) add(c *gin.Context) {
 		Enabled:   true,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	id, err := h.repo.Add(rule)
+	id, err := h.repo.Add(userID, rule)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add alert"})
 		return
