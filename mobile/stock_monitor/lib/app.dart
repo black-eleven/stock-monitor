@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/theme.dart';
+import 'presentation/providers/auth_provider.dart';
+import 'presentation/screens/login_screen.dart';
 import 'presentation/screens/watchlist_screen.dart';
 import 'presentation/screens/kline_screen.dart';
 import 'presentation/screens/holdings_screen.dart';
@@ -10,23 +13,36 @@ import 'presentation/screens/analysis_screen.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
-final router = GoRouter(
-  navigatorKey: _rootNavigatorKey,
-  initialLocation: '/watchlist',
-  routes: [
-    ShellRoute(
-      navigatorKey: _shellNavigatorKey,
-      builder: (context, state, child) => AppShell(child: child),
-      routes: [
-        GoRoute(path: '/watchlist', builder: (_, __) => const WatchlistScreen()),
-        GoRoute(path: '/kline', builder: (_, __) => const KlineScreen()),
-        GoRoute(path: '/holdings', builder: (_, __) => const HoldingsScreen()),
-        GoRoute(path: '/alerts', builder: (_, __) => const AlertsScreen()),
-        GoRoute(path: '/analysis', builder: (_, __) => const AnalysisScreen()),
-      ],
-    ),
-  ],
-);
+final routerProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authProvider);
+
+  return GoRouter(
+    navigatorKey: _rootNavigatorKey,
+    initialLocation: '/watchlist',
+    redirect: (context, state) {
+      final isLoggedIn = authState.isLoggedIn;
+      final isLoginRoute = state.uri.path == '/login';
+
+      if (!isLoggedIn && !isLoginRoute) return '/login';
+      if (isLoggedIn && isLoginRoute) return '/watchlist';
+      return null;
+    },
+    routes: [
+      GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+      ShellRoute(
+        navigatorKey: _shellNavigatorKey,
+        builder: (context, state, child) => AppShell(child: child),
+        routes: [
+          GoRoute(path: '/watchlist', builder: (_, __) => const WatchlistScreen()),
+          GoRoute(path: '/kline', builder: (_, __) => const KlineScreen()),
+          GoRoute(path: '/holdings', builder: (_, __) => const HoldingsScreen()),
+          GoRoute(path: '/alerts', builder: (_, __) => const AlertsScreen()),
+          GoRoute(path: '/analysis', builder: (_, __) => const AnalysisScreen()),
+        ],
+      ),
+    ],
+  );
+});
 
 class AppShell extends StatelessWidget {
   final Widget child;
@@ -63,5 +79,20 @@ class AppShell extends StatelessWidget {
   void _onTap(BuildContext context, int i) {
     final routes = ['/watchlist', '/kline', '/holdings', '/alerts', '/analysis'];
     context.go(routes[i]);
+  }
+}
+
+class StockMonitorApp extends ConsumerWidget {
+  const StockMonitorApp({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
+    return MaterialApp.router(
+      title: 'Stock Monitor',
+      theme: AppTheme.darkTheme,
+      routerConfig: router,
+      debugShowCheckedModeBanner: false,
+    );
   }
 }

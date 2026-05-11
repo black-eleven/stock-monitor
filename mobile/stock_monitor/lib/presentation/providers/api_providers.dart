@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/api/api_client.dart';
+import 'auth_provider.dart';
 import '../../data/api/watchlist_api.dart';
 import '../../data/api/alert_api.dart';
 import '../../data/api/holding_api.dart';
