@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Monitor — Go 后端 + Flutter 移动端迁移设计</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 960px;
+    margin: 40px auto;
+    padding: 0 20px;
+    line-height: 1.7;
+    color: #333;
+  }
+  h1 { font-size: 1.8em; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+  h2 { font-size: 1.4em; margin-top: 36px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+  h3 { font-size: 1.1em; margin-top: 24px; }
+  code {
+    background: #f4f4f4;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  pre {
+    background: #f4f4f4;
+    padding: 12px 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.9em;
+  }
+  pre code { background: none; padding: 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  th { background: #f7f7f7; font-weight: 600; }
+  hr { border: none; border-top: 1px solid #eee; margin: 32px 0; }
+  strong { color: #222; }
+  ul, ol { padding-left: 24px; }
+  blockquote {
+    border-left: 3px solid #ddd;
+    margin: 12px 0;
+    padding: 4px 16px;
+    color: #555;
+  }
+  a { color: #0969da; }
+</style>
+</head>
+<body>
+<h1 id="stock-monitor-go-flutter">Stock Monitor — Go 后端 + Flutter 移动端迁移设计</h1>
+<h2 id="1">1. 概述</h2>
+<h3 id="_1">目标</h3>
+<p>将现有 Node.js 单机股票监控工具扩展为多端架构：</p>
+<ul>
+<li><strong>保留</strong> Web 前端（<code>public/</code> 下的 HTML/JS/CSS）</li>
+<li><strong>新增</strong> Go 后端，替代 Node.js Express 服务端</li>
+<li><strong>新增</strong> Flutter 移动端（iOS + Android）</li>
+<li><strong>新增</strong> SQLite 数据库，替代 JSON 文件存储</li>
+</ul>
+<h3 id="_2">非目标</h3>
+<ul>
+<li>不引入用户认证系统（维持 localhost 单用户场景）</li>
+<li>不改动 QOS 行情源接入方式</li>
+<li>不改动前端 UI 设计</li>
+</ul>
+<h3 id="_3">约束</h3>
+<table>
+<thead>
+<tr>
+<th>约束</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API 兼容</td>
+<td>HTTP API 路径、请求/响应格式尽量和现有 Node.js 版一致</td>
+</tr>
+<tr>
+<td>WS 协议兼容</td>
+<td>Web 和 Flutter 使用相同的 WS 消息格式</td>
+</tr>
+<tr>
+<td>单仓库</td>
+<td>所有代码在同一 Git 仓库中</td>
+</tr>
+<tr>
+<td>零额外部署</td>
+<td>SQLite 嵌入式数据库，无需独立数据库服务</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2">2. 总体架构</h2>
+<div class="codehilite"><pre><span></span><code><span class="w">                         </span><span class="err">┌──────────────────────────────────────────┐</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">              </span><span class="k">Go</span><span class="w"> </span><span class="n">后端</span><span class="w"> </span><span class="p">(</span><span class="err">:</span><span class="mi">3000</span><span class="p">)</span><span class="w">               </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">                                          </span><span class="err">│</span>
+<span class="w">  </span><span class="n">QOS</span><span class="w"> </span><span class="n">行情源</span><span class="w">              </span><span class="err">│</span><span class="w">  </span><span class="err">┌──────────┐</span><span class="w">  </span><span class="err">┌─────────┐</span><span class="w">  </span><span class="err">┌─────────┐</span><span class="w"> </span><span class="err">│</span>
+<span class="w"> </span><span class="p">(</span><span class="n">WebSocket</span><span class="p">)</span><span class="w"> </span><span class="err">←──────────→│</span><span class="w">  </span><span class="err">│</span><span class="w"> </span><span class="n">QOS</span><span class="w"> </span><span class="n">Client</span><span class="err">│</span><span class="w">  </span><span class="err">│</span><span class="w"> </span><span class="n">WS</span><span class="w"> </span><span class="n">Hub</span><span class="w">  </span><span class="err">│</span><span class="w">  </span><span class="err">│</span><span class="w"> </span><span class="n">Gin</span><span class="w"> </span><span class="n">HTTP</span><span class="err">│</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">  </span><span class="err">│</span><span class="p">(</span><span class="n">goroutine</span><span class="p">)</span><span class="err">│</span><span class="w">  </span><span class="err">│</span><span class="p">(</span><span class="n">gorilla</span><span class="p">)</span><span class="err">│</span><span class="w">  </span><span class="err">│</span><span class="w">  </span><span class="n">Server</span><span class="w">  </span><span class="err">│</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">  </span><span class="err">└────┬─────┘</span><span class="w">  </span><span class="err">└────┬────┘</span><span class="w">  </span><span class="err">└────┬────┘</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">       </span><span class="err">│</span><span class="w">             </span><span class="err">│</span><span class="w">            </span><span class="err">│</span><span class="w">       </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">       </span><span class="err">└──────┬──────┘</span><span class="w">            </span><span class="err">│</span><span class="w">       </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">              </span><span class="err">│</span><span class="w">                   </span><span class="err">│</span><span class="w">       </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">     </span><span class="err">┌────────┴────────┐</span><span class="w">          </span><span class="err">│</span><span class="w">       </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">     </span><span class="err">│</span><span class="w">   </span><span class="n">Alert</span><span class="w"> </span><span class="n">Engine</span><span class="w">  </span><span class="err">│</span><span class="w">   </span><span class="err">┌──────┴─────┐</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">     </span><span class="err">└────────┬────────┘</span><span class="w">   </span><span class="err">│</span><span class="w">  </span><span class="n">Handlers</span><span class="w">  </span><span class="err">│</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">              </span><span class="err">│</span><span class="w">            </span><span class="err">│</span><span class="w">  </span><span class="p">(</span><span class="n">repo</span><span class="p">)</span><span class="w">    </span><span class="err">│</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">              </span><span class="err">│</span><span class="w">            </span><span class="err">└──────┬─────┘</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">              </span><span class="err">│</span><span class="w">                   </span><span class="err">│</span><span class="w">       </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">     </span><span class="err">┌────────┴───────────────────┴─────┐</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">     </span><span class="err">│</span><span class="w">            </span><span class="n">SQLite</span><span class="w">                </span><span class="err">│</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">     </span><span class="err">└──────────────────────────────────┘</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">└──────┬───────────────┬──────────────────┘</span>
+<span class="w">                                </span><span class="err">│</span><span class="w"> </span><span class="n">HTTP</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">WS</span><span class="w">     </span><span class="err">│</span><span class="w"> </span><span class="n">HTTP</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">WS</span>
+<span class="w">                         </span><span class="err">┌──────┴──────┐</span><span class="w"> </span><span class="err">┌──────┴──────┐</span>
+<span class="w">                         </span><span class="err">│</span><span class="w">  </span><span class="n">Web</span><span class="w"> </span><span class="n">前端</span><span class="w">    </span><span class="err">│</span><span class="w"> </span><span class="err">│</span><span class="w"> </span><span class="n">Flutter</span><span class="w"> </span><span class="n">App</span><span class="w"> </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w"> </span><span class="k">public</span><span class="o">/</span><span class="w"> </span><span class="n">目录</span><span class="w">  </span><span class="err">│</span><span class="w"> </span><span class="err">│</span><span class="w">   </span><span class="n">mobile</span><span class="o">/</span><span class="w">   </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">│</span><span class="w"> </span><span class="p">(</span><span class="n">保留原版</span><span class="p">)</span><span class="w">    </span><span class="err">│</span><span class="w"> </span><span class="err">│</span><span class="w"> </span><span class="n">iOS</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">安卓</span><span class="w">   </span><span class="err">│</span>
+<span class="w">                         </span><span class="err">└─────────────┘</span><span class="w"> </span><span class="err">└─────────────┘</span>
+</code></pre></div>
+
+<hr />
+<h2 id="3-go">3. Go 后端</h2>
+<h3 id="31">3.1 依赖</h3>
+<div class="codehilite"><pre><span></span><code><span class="n">github</span><span class="p">.</span><span class="n">com</span><span class="o">/</span><span class="n">gin</span><span class="o">-</span><span class="n">gonic</span><span class="o">/</span><span class="n">gin</span><span class="w">          </span><span class="err">#</span><span class="w"> </span><span class="n">HTTP</span><span class="w"> </span><span class="n">框架</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">路由</span>
+<span class="n">github</span><span class="p">.</span><span class="n">com</span><span class="o">/</span><span class="n">gorilla</span><span class="o">/</span><span class="n">websocket</span><span class="w">       </span><span class="err">#</span><span class="w"> </span><span class="n">WebSocket</span><span class="w"> </span><span class="p">(</span><span class="n">QOS</span><span class="w"> </span><span class="n">客户端</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">浏览器服务端</span><span class="p">)</span>
+<span class="n">github</span><span class="p">.</span><span class="n">com</span><span class="o">/</span><span class="n">mattn</span><span class="o">/</span><span class="k">go</span><span class="o">-</span><span class="n">sqlite3</span><span class="w">        </span><span class="err">#</span><span class="w"> </span><span class="n">SQLite</span><span class="w"> </span><span class="n">驱动</span>
+<span class="n">github</span><span class="p">.</span><span class="n">com</span><span class="o">/</span><span class="n">joho</span><span class="o">/</span><span class="n">godotenv</span><span class="w">           </span><span class="err">#</span><span class="w"> </span><span class="p">.</span><span class="n">env</span><span class="w"> </span><span class="n">加载</span>
+</code></pre></div>
+
+<h3 id="32">3.2 目录结构</h3>
+<div class="codehilite"><pre><span></span><code><span class="n">stock</span><span class="o">-</span><span class="n">monitor</span><span class="o">/</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">cmd</span><span class="o">/</span><span class="n">server</span><span class="o">/</span><span class="n">main</span><span class="p">.</span><span class="k">go</span><span class="w">             </span><span class="err">#</span><span class="w"> </span><span class="n">入口</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">internal</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">config</span><span class="o">/</span><span class="n">config</span><span class="p">.</span><span class="k">go</span><span class="w">           </span><span class="err">#</span><span class="w"> </span><span class="n">环境变量</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">db</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">sqlite</span><span class="p">.</span><span class="k">go</span><span class="w">              </span><span class="err">#</span><span class="w"> </span><span class="n">连接</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">迁移</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">migrations</span><span class="o">/</span><span class="mi">001</span><span class="n">_init</span><span class="p">.</span><span class="k">sql</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">model</span><span class="o">/</span><span class="w">                     </span><span class="err">#</span><span class="w"> </span><span class="n">数据结构</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">watchlist</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">alert</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">holding</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">quote</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">repo</span><span class="o">/</span><span class="w">                      </span><span class="err">#</span><span class="w"> </span><span class="n">数据访问层</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">watchlist</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">alert</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">holding</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">qos</span><span class="o">/</span><span class="w">                       </span><span class="err">#</span><span class="w"> </span><span class="n">QOS</span><span class="w"> </span><span class="n">WebSocket</span><span class="w"> </span><span class="n">客户端</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="k">go</span><span class="w">              </span><span class="err">#</span><span class="w"> </span><span class="n">连接</span><span class="err">、</span><span class="n">重连</span><span class="err">、</span><span class="n">心跳</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">kline</span><span class="p">.</span><span class="k">go</span><span class="w">               </span><span class="err">#</span><span class="w"> </span><span class="n">fetchHistoryKline</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">ws</span><span class="o">/</span><span class="w">                        </span><span class="err">#</span><span class="w"> </span><span class="n">浏览器</span><span class="o">/</span><span class="n">App</span><span class="w"> </span><span class="n">WebSocket</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">hub</span><span class="p">.</span><span class="k">go</span><span class="w">                 </span><span class="err">#</span><span class="w"> </span><span class="n">广播管理</span>
+<span class="err">│</span><span class="w">   </span><span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">client</span><span class="p">.</span><span class="k">go</span><span class="w">              </span><span class="err">#</span><span class="w"> </span><span class="n">单连接读写</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">alert</span><span class="o">/</span><span class="n">engine</span><span class="p">.</span><span class="k">go</span><span class="w">            </span><span class="err">#</span><span class="w"> </span><span class="n">告警评估引擎</span>
+<span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">handler</span><span class="o">/</span><span class="w">                   </span><span class="err">#</span><span class="w"> </span><span class="n">HTTP</span><span class="w"> </span><span class="n">handlers</span>
+<span class="err">│</span><span class="w">       </span><span class="err">├──</span><span class="w"> </span><span class="n">watchlist</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">       </span><span class="err">├──</span><span class="w"> </span><span class="n">alert</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">       </span><span class="err">├──</span><span class="w"> </span><span class="n">holding</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">       </span><span class="err">├──</span><span class="w"> </span><span class="n">quote</span><span class="p">.</span><span class="k">go</span>
+<span class="err">│</span><span class="w">       </span><span class="err">└──</span><span class="w"> </span><span class="n">kline</span><span class="p">.</span><span class="k">go</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">web</span><span class="o">/</span><span class="w">                           </span><span class="err">#</span><span class="w"> </span><span class="n">现有</span><span class="w"> </span><span class="k">public</span><span class="o">/</span><span class="w"> </span><span class="n">迁移</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="k">Go</span><span class="w"> </span><span class="n">embed</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="k">index</span><span class="p">.</span><span class="n">html</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">css</span><span class="o">/</span><span class="n">style</span><span class="p">.</span><span class="n">css</span>
+<span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">js</span><span class="cm">/*.js</span>
+<span class="cm">├── mobile/                        # Flutter 项目</span>
+<span class="cm">│   └── stock_monitor/</span>
+<span class="cm">├── data/                          # SQLite 数据库文件目录</span>
+<span class="cm">├── go.mod</span>
+<span class="cm">├── go.sum</span>
+<span class="cm">└── Makefile</span>
+</code></pre></div>
+
+<h3 id="33-sqlite">3.3 SQLite 数据模型</h3>
+<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">watchlist</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">symbol</span><span class="w">   </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span><span class="w">   </span><span class="c1">-- &quot;HK:700&quot;, &quot;SH:600519&quot;</span>
+<span class="w">    </span><span class="n">name</span><span class="w">     </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">      </span><span class="c1">-- &quot;腾讯控股&quot;</span>
+<span class="w">    </span><span class="n">added_at</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="w">       </span><span class="c1">-- ISO 8601</span>
+<span class="p">);</span>
+
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">holdings</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">symbol</span><span class="w">   </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<span class="w">    </span><span class="n">name</span><span class="w">     </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">shares</span><span class="w">   </span><span class="nb">REAL</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">avg_cost</span><span class="w"> </span><span class="nb">REAL</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">buy_date</span><span class="w"> </span><span class="nb">TEXT</span><span class="w">               </span><span class="c1">-- &quot;YYYY-MM-DD&quot;</span>
+<span class="p">);</span>
+
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">alerts</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">id</span><span class="w">                 </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="n">AUTOINCREMENT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">symbol</span><span class="w">             </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="k">type</span><span class="w">               </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span><span class="w">     </span><span class="c1">-- &quot;above&quot; / &quot;below&quot; / &quot;change_pct&quot;</span>
+<span class="w">    </span><span class="n">value</span><span class="w">              </span><span class="nb">REAL</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">enabled</span><span class="w">            </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">    </span><span class="n">created_at</span><span class="w">         </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">last_triggered_at</span><span class="w">  </span><span class="nb">TEXT</span>
+<span class="p">);</span>
+
+<span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">alert_logs</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="n">id</span><span class="w">           </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="w"> </span><span class="n">AUTOINCREMENT</span><span class="p">,</span>
+<span class="w">    </span><span class="n">alert_id</span><span class="w">     </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">symbol</span><span class="w">       </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">price</span><span class="w">        </span><span class="nb">REAL</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">message</span><span class="w">      </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="n">triggered_at</span><span class="w"> </span><span class="nb">TEXT</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span>
+<span class="p">);</span>
+</code></pre></div>
+
+<h3 id="34-api">3.4 API 路由</h3>
+<p>完全兼容现有 API：</p>
+<div class="codehilite"><pre><span></span><code><span class="err">#</span><span class="w"> </span><span class="nx">自选股</span>
+<span class="nx">GET</span><span class="w">    </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">watchlist</span>
+<span class="nx">POST</span><span class="w">   </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">watchlist</span><span class="w">          </span><span class="nx">body</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">symbol</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="p">}</span>
+<span class="nx">DELETE</span><span class="w"> </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">watchlist</span><span class="o">/</span><span class="p">:</span><span class="nx">symbol</span>
+
+<span class="err">#</span><span class="w"> </span><span class="nx">提醒</span>
+<span class="nx">GET</span><span class="w">    </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">alerts</span>
+<span class="nx">POST</span><span class="w">   </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">alerts</span><span class="w">             </span><span class="nx">body</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">symbol</span><span class="p">,</span><span class="w"> </span><span class="k">type</span><span class="p">,</span><span class="w"> </span><span class="nx">value</span><span class="w"> </span><span class="p">}</span>
+<span class="nx">PUT</span><span class="w">    </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">alerts</span><span class="o">/</span><span class="p">:</span><span class="nx">id</span><span class="w">         </span><span class="nx">body</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">enabled</span><span class="p">?,</span><span class="w"> </span><span class="nx">value</span><span class="p">?</span><span class="w"> </span><span class="p">}</span>
+<span class="nx">DELETE</span><span class="w"> </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">alerts</span><span class="o">/</span><span class="p">:</span><span class="nx">id</span>
+
+<span class="err">#</span><span class="w"> </span><span class="nx">持仓</span>
+<span class="nx">GET</span><span class="w">    </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">holdings</span>
+<span class="nx">POST</span><span class="w">   </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">holdings</span><span class="w">           </span><span class="nx">body</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">symbol</span><span class="p">,</span><span class="w"> </span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="nx">shares</span><span class="p">,</span><span class="w"> </span><span class="nx">avgCost</span><span class="p">,</span><span class="w"> </span><span class="nx">buyDate</span><span class="p">?</span><span class="w"> </span><span class="p">}</span>
+<span class="nx">PUT</span><span class="w">    </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">holdings</span><span class="o">/</span><span class="p">:</span><span class="nx">symbol</span><span class="w">   </span><span class="nx">body</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">shares</span><span class="p">?,</span><span class="w"> </span><span class="nx">avgCost</span><span class="p">?,</span><span class="w"> </span><span class="nx">buyDate</span><span class="p">?</span><span class="w"> </span><span class="p">}</span>
+<span class="nx">DELETE</span><span class="w"> </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">holdings</span><span class="o">/</span><span class="p">:</span><span class="nx">symbol</span>
+
+<span class="err">#</span><span class="w"> </span><span class="nx">行情</span>
+<span class="nx">GET</span><span class="w">    </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">quote</span><span class="o">/</span><span class="nx">batch</span><span class="p">?</span><span class="nx">symbols</span><span class="p">=</span><span class="nx">HK</span><span class="p">:</span><span class="mi">700</span><span class="p">,</span><span class="nx">HK</span><span class="p">:</span><span class="mi">1810</span>
+<span class="nx">GET</span><span class="w">    </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">quote</span><span class="o">/</span><span class="p">:</span><span class="nx">symbol</span><span class="w">      </span><span class="err">#</span><span class="w"> </span><span class="nx">symbol</span><span class="w"> </span><span class="nx">格式</span><span class="p">:</span><span class="w"> </span><span class="o">^</span><span class="p">(</span><span class="nx">HK</span><span class="o">|</span><span class="nx">SH</span><span class="o">|</span><span class="nx">SZ</span><span class="o">|</span><span class="nx">US</span><span class="p">):[</span><span class="nx">A</span><span class="o">-</span><span class="nx">Z0</span><span class="o">-</span><span class="mi">9</span><span class="p">]{</span><span class="mi">1</span><span class="p">,</span><span class="mi">10</span><span class="p">}</span><span class="err">$</span>
+
+<span class="err">#</span><span class="w"> </span><span class="nx">K线</span>
+<span class="nx">GET</span><span class="w">    </span><span class="o">/</span><span class="kn">api</span><span class="o">/</span><span class="nx">kline</span><span class="o">/</span><span class="p">:</span><span class="nx">symbol</span><span class="p">?</span><span class="nx">interval</span><span class="p">=</span><span class="mi">1</span><span class="nx">d</span><span class="o">&amp;</span><span class="nx">count</span><span class="p">=</span><span class="mi">100</span>
+
+<span class="err">#</span><span class="w"> </span><span class="nx">WebSocket</span>
+<span class="nx">GET</span><span class="w">    </span><span class="o">/</span><span class="nx">ws</span><span class="w">                     </span><span class="err">#</span><span class="w"> </span><span class="nx">实时行情推送</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">告警推送</span>
+</code></pre></div>
+
+<h3 id="35-qos-client">3.5 QOS Client 设计</h3>
+<p>从 Node.js 版 <code>qos-client.js</code> 翻译为 Go，关键改进：</p>
+<table>
+<thead>
+<tr>
+<th>Node.js (旧)</th>
+<th>Go (新)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Date.now()</code> + seq 做 reqid</td>
+<td><code>atomic.AddInt64</code> 自增计数器</td>
+</tr>
+<tr>
+<td><code>on('message')</code> 临时处理器</td>
+<td><code>sync.Map</code> 做 <code>reqid → chan response</code> 映射</td>
+</tr>
+<tr>
+<td>Promise + 闭包 reject</td>
+<td><code>select</code> + <code>case &lt;-time.After(10s)</code> 超时</td>
+</tr>
+<tr>
+<td>单 goroutine (Node 事件循环)</td>
+<td>读 goroutine + 写 goroutine + 重连控制</td>
+</tr>
+</tbody>
+</table>
+<p>结构：</p>
+<div class="codehilite"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">QosClient</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">conn</span><span class="w">      </span><span class="o">*</span><span class="nx">websocket</span><span class="p">.</span><span class="nx">Conn</span>
+<span class="w">    </span><span class="nx">sendCh</span><span class="w">    </span><span class="kd">chan</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span><span class="w">          </span><span class="c1">// 写 goroutine</span>
+<span class="w">    </span><span class="nx">pending</span><span class="w">   </span><span class="nx">sync</span><span class="p">.</span><span class="nx">Map</span><span class="w">             </span><span class="c1">// reqid → chan response</span>
+<span class="w">    </span><span class="nx">reqSeq</span><span class="w">    </span><span class="kt">int64</span><span class="w">                </span><span class="c1">// 原子自增</span>
+<span class="w">    </span><span class="nx">onQuote</span><span class="w">   </span><span class="kd">func</span><span class="p">(</span><span class="nx">Quote</span><span class="p">)</span><span class="w">          </span><span class="c1">// 行情回调</span>
+<span class="w">    </span><span class="nx">onKline</span><span class="w">   </span><span class="kd">func</span><span class="p">(</span><span class="nx">Kline</span><span class="p">)</span><span class="w">          </span><span class="c1">// K线回调</span>
+<span class="w">    </span><span class="c1">// ... 重连、心跳、订阅管理</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<h3 id="36-websocket-hub">3.6 WebSocket Hub</h3>
+<div class="codehilite"><pre><span></span><code><span class="kd">type</span><span class="w"> </span><span class="nx">Hub</span><span class="w"> </span><span class="kd">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">clients</span><span class="w">    </span><span class="kd">map</span><span class="p">[</span><span class="o">*</span><span class="nx">Client</span><span class="p">]</span><span class="kt">bool</span>
+<span class="w">    </span><span class="nx">broadcast</span><span class="w">  </span><span class="kd">chan</span><span class="w"> </span><span class="p">[]</span><span class="kt">byte</span>
+<span class="w">    </span><span class="nx">register</span><span class="w">   </span><span class="kd">chan</span><span class="w"> </span><span class="o">*</span><span class="nx">Client</span>
+<span class="w">    </span><span class="nx">unregister</span><span class="w"> </span><span class="kd">chan</span><span class="w"> </span><span class="o">*</span><span class="nx">Client</span>
+<span class="w">    </span><span class="nx">quotes</span><span class="w">     </span><span class="nx">sync</span><span class="p">.</span><span class="nx">Map</span><span class="w">           </span><span class="c1">// code → Quote (snapshot 缓存)</span>
+<span class="p">}</span>
+
+<span class="c1">// 单 goroutine Run()，select 多路复用：</span>
+<span class="c1">//   register   → 加入 clients</span>
+<span class="c1">//   unregister → 移除 + 清理</span>
+<span class="c1">//   broadcast  → 遍历 clients 发送</span>
+</code></pre></div>
+
+<ul>
+<li>新连接：先发送 snapshot（所有缓存行情），再增量推送</li>
+<li>消息格式：<code>{ "type": "quote", "data": {...} }</code> / <code>{ "type": "alert", "data": {...} }</code> / <code>{ "type": "snapshot", "data": [...] }</code></li>
+</ul>
+<h3 id="37-alert-engine">3.7 Alert Engine</h3>
+<p>和现有 Node.js 版逻辑完全一致：</p>
+<ol>
+<li><code>OnQuote(quote)</code> → 从 DB 查询该 symbol 的启用的告警规则（每次 evaluate 重新查询，和 Node.js 版每次 <code>storage.read('alerts')</code> 行为一致）</li>
+<li>逐条判断：<code>above</code>（<code>price &gt;= value</code>）、<code>below</code>（<code>price &lt;= value</code>）、<code>change_pct</code>（<code>abs((price-yp)/yp*100) &gt;= abs(value)</code>）</li>
+<li>30 分钟去重：检查 <code>last_triggered_at</code>，未超过阈值则跳过</li>
+<li>触发：更新 <code>last_triggered_at</code>、写入 <code>alert_logs</code>、<code>Hub.BroadcastAlert()</code></li>
+</ol>
+<h3 id="38-web">3.8 Web 前端适配</h3>
+<p>现有 <code>public/</code> 只需改动一处：<code>api.js</code> 中 WebSocket 连接地址：</p>
+<div class="codehilite"><pre><span></span><code><span class="gd">- this.ws = new WebSocket(`${protocol}//${location.host}`);</span>
+<span class="gi">+ this.ws = new WebSocket(`${protocol}//${location.host}/ws`);</span>
+</code></pre></div>
+
+<p>消息格式（<code>{ type, data }</code>）不变。HTML/CSS/JS 代码完全保留。</p>
+<p>其他注意事项：
+- Gin 路由 <code>/api/*</code> 精确匹配优先于 <code>StaticFS("/", ...)</code>，不会冲突
+- 数据迁移脚本 <code>cmd/migrate/main.go</code> 作为独立二进制运行，不在 <code>main.go</code> 中</p>
+<h3 id="39">3.9 启动流程</h3>
+<div class="codehilite"><pre><span></span><code><span class="kd">func</span><span class="w"> </span><span class="nx">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">cfg</span><span class="w">  </span><span class="o">:=</span><span class="w"> </span><span class="nx">config</span><span class="p">.</span><span class="nx">Load</span><span class="p">()</span>
+<span class="w">    </span><span class="nx">db</span><span class="w">   </span><span class="o">:=</span><span class="w"> </span><span class="nx">db</span><span class="p">.</span><span class="nx">Open</span><span class="p">(</span><span class="nx">cfg</span><span class="p">.</span><span class="nx">DataDir</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">hub</span><span class="w">  </span><span class="o">:=</span><span class="w"> </span><span class="nx">ws</span><span class="p">.</span><span class="nx">NewHub</span><span class="p">()</span>
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">hub</span><span class="p">.</span><span class="nx">Run</span><span class="p">()</span>
+
+<span class="w">    </span><span class="nx">qos</span><span class="w">    </span><span class="o">:=</span><span class="w"> </span><span class="nx">qos</span><span class="p">.</span><span class="nx">NewClient</span><span class="p">(</span><span class="nx">cfg</span><span class="p">.</span><span class="nx">QosKey</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">engine</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">alert</span><span class="p">.</span><span class="nx">NewEngine</span><span class="p">(</span><span class="nx">db</span><span class="p">,</span><span class="w"> </span><span class="nx">hub</span><span class="p">)</span>
+
+<span class="w">    </span><span class="nx">qos</span><span class="p">.</span><span class="nx">OnQuote</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="kd">func</span><span class="p">(</span><span class="nx">q</span><span class="w"> </span><span class="nx">model</span><span class="p">.</span><span class="nx">Quote</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nx">hub</span><span class="p">.</span><span class="nx">BroadcastQuote</span><span class="p">(</span><span class="nx">q</span><span class="p">)</span>
+<span class="w">        </span><span class="nx">engine</span><span class="p">.</span><span class="nx">Evaluate</span><span class="p">(</span><span class="nx">q</span><span class="p">)</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="nx">r</span><span class="w"> </span><span class="o">:=</span><span class="w"> </span><span class="nx">gin</span><span class="p">.</span><span class="nx">Default</span><span class="p">()</span>
+<span class="w">    </span><span class="nx">r</span><span class="p">.</span><span class="nx">StaticFS</span><span class="p">(</span><span class="s">&quot;/&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">http</span><span class="p">.</span><span class="nx">FS</span><span class="p">(</span><span class="nx">webFS</span><span class="p">))</span><span class="w">  </span><span class="c1">// go:embed web/</span>
+<span class="w">    </span><span class="nx">handler</span><span class="p">.</span><span class="nx">RegisterAll</span><span class="p">(</span><span class="nx">r</span><span class="p">.</span><span class="nx">Group</span><span class="p">(</span><span class="s">&quot;/api&quot;</span><span class="p">),</span><span class="w"> </span><span class="nx">db</span><span class="p">,</span><span class="w"> </span><span class="nx">qos</span><span class="p">)</span>
+<span class="w">    </span><span class="nx">r</span><span class="p">.</span><span class="nx">GET</span><span class="p">(</span><span class="s">&quot;/ws&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">hub</span><span class="p">.</span><span class="nx">ServeWS</span><span class="p">)</span>
+
+<span class="w">    </span><span class="k">go</span><span class="w"> </span><span class="nx">qos</span><span class="p">.</span><span class="nx">Connect</span><span class="p">()</span>
+<span class="w">    </span><span class="nx">r</span><span class="p">.</span><span class="nx">Run</span><span class="p">(</span><span class="s">&quot;:&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">cfg</span><span class="p">.</span><span class="nx">Port</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<hr />
+<h2 id="4-flutter">4. Flutter 移动端</h2>
+<h3 id="41">4.1 技术栈</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>选择</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>状态管理</td>
+<td><strong>Riverpod</strong></td>
+<td>类型安全、无全局单例、适合中等复杂度</td>
+</tr>
+<tr>
+<td>HTTP 客户端</td>
+<td><strong>dio</strong></td>
+<td>拦截器链、超时重试、拦截器易于调试</td>
+</tr>
+<tr>
+<td>WebSocket</td>
+<td><strong>web_socket_channel</strong></td>
+<td>Dart 官方维护</td>
+</tr>
+<tr>
+<td>K线图</td>
+<td><strong>fl_chart</strong> + 自定义指标</td>
+<td>蜡烛图原生支持、LineChart 叠加 MA、交互缩放</td>
+</tr>
+<tr>
+<td>本地缓存</td>
+<td><strong>shared_preferences</strong></td>
+<td>存设置（后端地址、默认周期）</td>
+</tr>
+<tr>
+<td>路由</td>
+<td><strong>go_router</strong></td>
+<td>声明式路由、BottomNav 支持好</td>
+</tr>
+<tr>
+<td>架构</td>
+<td>精简 Clean Architecture</td>
+<td>data / domain / presentation 三层</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42">4.2 目录结构</h3>
+<div class="codehilite"><pre><span></span><code>mobile/stock_monitor/
+├── lib/
+│   ├── main.dart                    # ProviderScope + App
+│   ├── app.dart                     # MaterialApp.router + 暗色主题
+│   │
+│   ├── core/
+│   │   ├── config.dart              # 后端地址、API 前缀
+│   │   ├── theme.dart               # 暗色主题（#0d1117 背景，绿涨红跌）
+│   │   └── utils.dart               # formatPrice, shortCode, calcChangePct
+│   │
+│   ├── data/
+│   │   ├── api/
+│   │   │   ├── api_client.dart      # dio 实例（baseUrl, 超时, 拦截器）
+│   │   │   ├── watchlist_api.dart
+│   │   │   ├── alert_api.dart
+│   │   │   ├── holding_api.dart
+│   │   │   └── quote_api.dart
+│   │   ├── ws/
+│   │   │   └── ws_client.dart       # WebSocket 连接 + 自动重连
+│   │   └── repo/
+│   │       ├── watchlist_repo.dart
+│   │       ├── alert_repo.dart
+│   │       ├── holding_repo.dart
+│   │       └── quote_repo.dart
+│   │
+│   ├── domain/
+│   │   └── model/
+│   │       ├── stock.dart           # WatchlistItem, Quote
+│   │       ├── alert.dart           # AlertRule, AlertLog
+│   │       ├── holding.dart         # Holding
+│   │       └── kline.dart           # KlineBar
+│   │
+│   └── presentation/
+│       ├── providers/
+│       │   ├── watchlist_provider.dart
+│       │   ├── quote_provider.dart
+│       │   ├── holding_provider.dart
+│       │   ├── alert_provider.dart
+│       │   ├── kline_provider.dart
+│       │   └── analysis_provider.dart
+│       ├── screens/
+│       │   ├── watchlist_screen.dart
+│       │   ├── kline_screen.dart
+│       │   ├── holdings_screen.dart
+│       │   ├── alerts_screen.dart
+│       │   └── analysis_screen.dart
+│       └── widgets/
+│           ├── stock_card.dart
+│           ├── quote_badge.dart
+│           ├── kline_chart.dart      # fl_chart 封装 + MA/RSI/MACD
+│           ├── holding_row.dart
+│           └── alert_item.dart
+├── pubspec.yaml
+└── analysis_options.yaml
+</code></pre></div>
+
+<h3 id="43">4.3 页面设计</h3>
+<p>5 Tab 布局（BottomNavigationBar）：</p>
+<p><strong>自选股 Tab</strong>
+- 列表：每行显示股票名、代码、最新价（颜色涨跌）、涨跌幅
+- 点击展开详情：今开/最高/最低/昨收/成交量/成交额
+- 右上角 + 按钮添加自选（symbol + name 输入）
+- 长按或滑动删除</p>
+<p><strong>K线 Tab</strong>
+- 顶部 Symbol 下拉选择器
+- 周期切换行：分时/5M/15M/30M/1H/2H/4H/日K/周K/月K
+- 主图：蜡烛图 + MA5(黄)/MA20(蓝)/MA60(紫) 叠加
+- 副图1：RSI(14)，超买线(70)/超卖线(30)
+- 副图2：MACD 柱状图 + DIF/DEA 线
+- 支持双指缩放、拖拽、十字光标
+- 顶部显示 OHLC 四价
+- 卖出信号标记（红色向下箭头）</p>
+<p><strong>持仓 Tab</strong>
+- 汇总栏：总成本 / 总市值 / 总盈亏 / 总盈亏率（颜色标注）
+- 列表：股票名、持仓量、成本价、现价、盈亏额、盈亏率
+- 右上角 + 添加持仓（表单：symbol, shares, avgCost, buyDate）
+- 滑动编辑/删除</p>
+<p><strong>提醒 Tab</strong>
+- 上半部分：提醒规则列表，每条显示 symbol、类型（涨破/跌破/涨跌幅）、阈值、启用开关、删除按钮
+- 下半部分：触发日志（最近 50 条），时间 + 内容
+- + 按钮弹 BottomSheet 添加规则</p>
+<p><strong>分析 Tab</strong>
+- 全选股卖出信号扫描结果
+- 顶部：平均卖出分 + 市场情绪标签（绿/黄/红）
+- 列表卡片：股票名、现价、卖出评分、触发信号数、颜色编码
+- 点击卡片进入详情：8 维度信号逐条展示（信号名、状态指示灯、数值）</p>
+<h3 id="44">4.4 实时行情数据流</h3>
+<div class="codehilite"><pre><span></span><code><span class="nx">Go</span><span class="w"> </span><span class="nx">WS</span><span class="w"> </span><span class="nx">Server</span><span class="w"> </span><span class="p">(</span><span class="o">/</span><span class="nx">ws</span><span class="p">)</span>
+<span class="w">      </span><span class="err">│</span>
+<span class="w">      </span><span class="err">├──</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;snapshot&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="o">...</span><span class="p">]</span><span class="w"> </span><span class="p">}</span><span class="w">     </span><span class="err">←</span><span class="w"> </span><span class="nx">连接时一次性下发</span>
+<span class="w">      </span><span class="err">├──</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;quote&quot;</span><span class="p">,</span><span class="w">    </span><span class="s">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="o">...</span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w">     </span><span class="err">←</span><span class="w"> </span><span class="nx">增量推送</span>
+<span class="w">      </span><span class="err">└──</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;alert&quot;</span><span class="p">,</span><span class="w">    </span><span class="s">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="o">...</span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w">     </span><span class="err">←</span><span class="w"> </span><span class="nx">告警推送</span>
+<span class="w">      </span><span class="err">│</span>
+<span class="w">      </span><span class="err">▼</span>
+<span class="nx">WsClient</span><span class="w"> </span><span class="p">(</span><span class="nx">data</span><span class="o">/</span><span class="nx">ws</span><span class="o">/</span><span class="p">)</span>
+<span class="w">      </span><span class="err">│</span>
+<span class="w">      </span><span class="err">├──→</span><span class="w"> </span><span class="nx">QuoteProvider</span><span class="w">    </span><span class="err">──→</span><span class="w"> </span><span class="nx">WatchlistScreen</span><span class="err">（</span><span class="nx">价格更新</span><span class="err">）</span>
+<span class="w">      </span><span class="err">│</span><span class="w">                     </span><span class="err">──→</span><span class="w"> </span><span class="nx">HoldingsScreen</span><span class="err">（</span><span class="nx">盈亏更新</span><span class="err">）</span>
+<span class="w">      </span><span class="err">│</span>
+<span class="w">      </span><span class="err">└──→</span><span class="w"> </span><span class="nx">AlertProvider</span><span class="w">    </span><span class="err">──→</span><span class="w"> </span><span class="nx">AlertsScreen</span><span class="err">（</span><span class="nx">日志</span><span class="o">+</span><span class="nx">Toast</span><span class="err">）</span>
+</code></pre></div>
+
+<h3 id="45-k">4.5 K线图实现方案</h3>
+<p>使用 <code>fl_chart</code> 的 <code>CandlestickChart</code> + <code>LineChart</code> 叠加：</p>
+<ul>
+<li>主图区域 60%：<code>CandlestickChart</code> 渲染 K 线 + 3 条 <code>LineChart</code> 叠加（MA5/MA20/MA60）</li>
+<li>RSI 区域 20%：<code>LineChart</code> 渲染 RSI 曲线 + 水平参考线（70/30）</li>
+<li>MACD 区域 20%：<code>BarChart</code> 渲染红绿柱 + <code>LineChart</code> 渲染 DIF/DEA</li>
+<li>手势：<code>GestureDetector</code> + <code>ScaleGestureRecognizer</code> 实现缩放/拖拽</li>
+<li>十字光标：<code>LongPressMoveUpdate</code> 显示 OHLC tooltip</li>
+</ul>
+<p>指标计算：将 <code>public/js/indicators.js</code> 中的 <code>calcMA</code>、<code>calcRSI</code>、<code>calcMACD</code>、<code>evaluateSignals</code> 翻译为 Dart 纯函数。</p>
+<hr />
+<h2 id="5">5. 迁移策略</h2>
+<h3 id="51">5.1 数据迁移</h3>
+<p>Node.js <code>data/*.json</code> → Go SQLite：</p>
+<ul>
+<li>提供一次性迁移脚本 <code>cmd/migrate/main.go</code></li>
+<li>读取 JSON 文件 → 插入 SQLite 表</li>
+<li>迁移后 JSON 文件保留为备份</li>
+</ul>
+<h3 id="52-4">5.2 实施顺序（推荐 4 阶段）</h3>
+<div class="codehilite"><pre><span></span><code><span class="n">Phase</span><span class="w"> </span><span class="mi">1</span><span class="err">:</span><span class="w"> </span><span class="k">Go</span><span class="w"> </span><span class="n">后端核心</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">项目骨架</span><span class="err">、</span><span class="n">配置</span><span class="err">、</span><span class="n">SQLite</span><span class="err">、</span><span class="n">migration</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">repo</span><span class="w"> </span><span class="n">层</span><span class="err">（</span><span class="n">watchlist</span><span class="p">,</span><span class="w"> </span><span class="n">alert</span><span class="p">,</span><span class="w"> </span><span class="n">holding</span><span class="w"> </span><span class="n">CRUD</span><span class="err">）</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">Gin</span><span class="w"> </span><span class="n">routes</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">handlers</span>
+<span class="w">  </span><span class="err">└──</span><span class="w"> </span><span class="n">单元测试</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">可独立运行</span>
+
+<span class="n">Phase</span><span class="w"> </span><span class="mi">2</span><span class="err">:</span><span class="w"> </span><span class="n">QOS</span><span class="w"> </span><span class="n">接入</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">WebSocket</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">qos</span><span class="o">/</span><span class="n">client</span><span class="p">.</span><span class="k">go</span><span class="err">（</span><span class="n">连接</span><span class="err">、</span><span class="n">fetchHistoryKline</span><span class="err">、</span><span class="n">fetchQuote</span><span class="err">）</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">ws</span><span class="o">/</span><span class="n">hub</span><span class="p">.</span><span class="k">go</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">ws</span><span class="o">/</span><span class="n">client</span><span class="p">.</span><span class="k">go</span><span class="err">（</span><span class="n">浏览器</span><span class="w"> </span><span class="n">WS</span><span class="err">）</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">alert</span><span class="o">/</span><span class="n">engine</span><span class="p">.</span><span class="k">go</span><span class="err">（</span><span class="n">告警评估</span><span class="err">）</span>
+<span class="w">  </span><span class="err">└──</span><span class="w"> </span><span class="n">集成测试</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">替代</span><span class="w"> </span><span class="n">Node</span><span class="p">.</span><span class="n">js</span>
+
+<span class="n">Phase</span><span class="w"> </span><span class="mi">3</span><span class="err">:</span><span class="w"> </span><span class="n">Web</span><span class="w"> </span><span class="n">前端适配</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">移动</span><span class="w"> </span><span class="k">public</span><span class="o">/</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">web</span><span class="o">/</span><span class="err">，</span><span class="k">go</span><span class="err">:</span><span class="n">embed</span><span class="w"> </span><span class="n">嵌入</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">验证所有</span><span class="w"> </span><span class="n">API</span><span class="w"> </span><span class="n">兼容</span>
+<span class="w">  </span><span class="err">└──</span><span class="w"> </span><span class="n">端到端测试</span>
+
+<span class="n">Phase</span><span class="w"> </span><span class="mi">4</span><span class="err">:</span><span class="w"> </span><span class="n">Flutter</span><span class="w"> </span><span class="n">移动端</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">项目骨架</span><span class="err">、</span><span class="n">主题</span><span class="err">、</span><span class="n">路由</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="n">个页面逐步开发</span>
+<span class="w">  </span><span class="err">├──</span><span class="w"> </span><span class="n">WebSocket</span><span class="w"> </span><span class="n">集成</span>
+<span class="w">  </span><span class="err">└──</span><span class="w"> </span><span class="n">iOS</span><span class="o">/</span><span class="n">Android</span><span class="w"> </span><span class="n">真机测试</span>
+</code></pre></div>
+
+<h3 id="53">5.3 旧代码处理</h3>
+<ul>
+<li><code>server/</code> 目录重命名为 <code>server-node-legacy/</code>，README 标注已废弃</li>
+<li><code>public/</code> 移动到 <code>web/</code>，由 Go embed 静态文件服务</li>
+<li><code>data/*.json</code> 迁移后保留为备份</li>
+<li><code>package.json</code> 移除 <code>express</code>、<code>ws</code> 依赖，保留仅作文档参考</li>
+</ul>
+<hr />
+<h2 id="6">6. 测试策略</h2>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>Go 后端</th>
+<th>Flutter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单元测试</td>
+<td>repo 层（SQLite in-memory）、handler 层（httptest）、qos mock</td>
+<td>indicator 计算函数、repo 层（mock API）</td>
+</tr>
+<tr>
+<td>集成测试</td>
+<td>QOS mock server + WS client</td>
+<td>无（依赖后端）</td>
+</tr>
+<tr>
+<td>E2E</td>
+<td>Playwright（Web）</td>
+<td>integration_test（Flutter）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7. 已知风险与缓解</h2>
+<table>
+<thead>
+<tr>
+<th>风险</th>
+<th>缓解措施</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>QOS API 无官方文档，协议靠逆向</td>
+<td>保留现有 Node.js 代码参考，逐字段验证</td>
+</tr>
+<tr>
+<td>fl_chart 不支持副图</td>
+<td>主图和副图用独立 Chart 组件，GestureDetector 同步缩放</td>
+</tr>
+<tr>
+<td>单仓库内 Go + Flutter 构建协调</td>
+<td>Makefile 统一入口：<code>make run</code> / <code>make build-mobile</code></td>
+</tr>
+<tr>
+<td>SQLite 无并发写入</td>
+<td>Go 后端是单进程，所有写入串行化在 HTTP handler；未来若需扩展再引入连接池</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8">8. 项目结构总览（最终态）</h2>
+<div class="codehilite"><pre><span></span><code><span class="n">stock</span><span class="o">-</span><span class="n">monitor</span><span class="o">/</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">cmd</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">server</span><span class="o">/</span><span class="n">main</span><span class="p">.</span><span class="k">go</span><span class="w">              </span><span class="err">#</span><span class="w"> </span><span class="k">Go</span><span class="w"> </span><span class="n">后端入口</span>
+<span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">migrate</span><span class="o">/</span><span class="n">main</span><span class="p">.</span><span class="k">go</span><span class="w">             </span><span class="err">#</span><span class="w"> </span><span class="n">JSON</span><span class="w"> </span><span class="err">→</span><span class="w"> </span><span class="n">SQLite</span><span class="w"> </span><span class="n">迁移工具</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">internal</span><span class="o">/</span><span class="w">                       </span><span class="err">#</span><span class="w"> </span><span class="k">Go</span><span class="w"> </span><span class="n">内部包</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">config</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">db</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">model</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">repo</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">qos</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">ws</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">alert</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">handler</span><span class="o">/</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">web</span><span class="o">/</span><span class="w">                            </span><span class="err">#</span><span class="w"> </span><span class="n">Web</span><span class="w"> </span><span class="n">前端</span><span class="err">（</span><span class="k">go</span><span class="err">:</span><span class="n">embed</span><span class="err">）</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="k">index</span><span class="p">.</span><span class="n">html</span>
+<span class="err">│</span><span class="w">   </span><span class="err">├──</span><span class="w"> </span><span class="n">css</span><span class="o">/</span>
+<span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">js</span><span class="o">/</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">mobile</span><span class="o">/</span><span class="w">                         </span><span class="err">#</span><span class="w"> </span><span class="n">Flutter</span><span class="w"> </span><span class="n">移动端</span>
+<span class="err">│</span><span class="w">   </span><span class="err">└──</span><span class="w"> </span><span class="n">stock_monitor</span><span class="o">/</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">server</span><span class="o">-</span><span class="n">node</span><span class="o">-</span><span class="n">legacy</span><span class="o">/</span><span class="w">             </span><span class="err">#</span><span class="w"> </span><span class="n">原</span><span class="w"> </span><span class="n">Node</span><span class="p">.</span><span class="n">js</span><span class="w"> </span><span class="n">代码</span><span class="err">（</span><span class="n">归档</span><span class="err">）</span>
+<span class="err">├──</span><span class="w"> </span><span class="k">data</span><span class="o">/</span><span class="w">                           </span><span class="err">#</span><span class="w"> </span><span class="n">SQLite</span><span class="w"> </span><span class="n">数据库</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">docs</span><span class="o">/</span><span class="w">                           </span><span class="err">#</span><span class="w"> </span><span class="n">文档</span>
+<span class="err">├──</span><span class="w"> </span><span class="k">go</span><span class="p">.</span><span class="k">mod</span>
+<span class="err">├──</span><span class="w"> </span><span class="k">go</span><span class="p">.</span><span class="nf">sum</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">Makefile</span>
+<span class="err">├──</span><span class="w"> </span><span class="n">README</span><span class="p">.</span><span class="n">md</span>
+<span class="err">└──</span><span class="w"> </span><span class="p">.</span><span class="n">env</span>
+</code></pre></div>
+</body>
+</html>
