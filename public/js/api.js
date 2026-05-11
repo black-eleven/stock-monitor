@@ -5,9 +5,17 @@ class ApiClient {
     this.reconnectTimer = null;
   }
 
+  _headers() {
+    return {
+      'Content-Type': 'application/json',
+      ...auth.getAuthHeaders(),
+    };
+  }
+
   // REST API helpers
   async get(path) {
-    const res = await fetch(path);
+    const res = await fetch(path, { headers: auth.getAuthHeaders() });
+    if (res.status === 401) { auth.logout(); return; }
     if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`);
     return res.json();
   }
@@ -15,9 +23,10 @@ class ApiClient {
   async post(path, body) {
     const res = await fetch(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this._headers(),
       body: JSON.stringify(body),
     });
+    if (res.status === 401) { auth.logout(); return; }
     if (!res.ok) throw new Error(`POST ${path} failed: ${res.status}`);
     return res.json();
   }
@@ -25,23 +34,29 @@ class ApiClient {
   async put(path, body) {
     const res = await fetch(path, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this._headers(),
       body: JSON.stringify(body),
     });
+    if (res.status === 401) { auth.logout(); return; }
     if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`);
     return res.json();
   }
 
   async del(path) {
-    const res = await fetch(path, { method: 'DELETE' });
+    const res = await fetch(path, {
+      method: 'DELETE',
+      headers: auth.getAuthHeaders(),
+    });
+    if (res.status === 401) { auth.logout(); return; }
     if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
     return res.json();
   }
 
   // WebSocket connection
   connectWs() {
+    if (!auth.token) return;
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.ws = new WebSocket(`${protocol}//${location.host}`);
+    this.ws = new WebSocket(`${protocol}//${location.host}/ws?token=${auth.token}`);
 
     this.ws.onopen = () => {
       console.log('[WS] Connected');
