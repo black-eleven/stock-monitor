@@ -40,7 +40,7 @@ func Score(results []ExtractionResult, quotes map[string]*qos.Quote) []model.Rec
 
 		recs = append(recs, model.Recommendation{
 			Symbol:        r.Symbol,
-			Name:          r.Symbol,
+			Name:          r.Name,
 			Score:         math.Round(total*100) / 100,
 			NewsCount:     r.Count,
 			Price:         price,
