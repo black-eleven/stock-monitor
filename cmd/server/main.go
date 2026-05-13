@@ -76,6 +76,9 @@ func main() {
 	recommender := recommend.NewRecommender(newsapiClient, qosClient, cfg.NewsAPIDays, cfg.NewsAPIPageSize, cfg.NewsAPILanguages)
 	recommendH := handler.NewRecommendHandler(recommender)
 
+	signalRepo := repo.NewSignalRepo(database)
+	signalH := handler.NewSignalHandler(signalRepo, hub)
+
 	authH := handler.NewAuthHandler(userRepo, inviteCodeRepo, cfg.JwtSecret)
 	adminH := handler.NewAdminHandler(inviteCodeRepo)
 
@@ -94,6 +97,7 @@ func main() {
 	quoteH.Register(auth)
 	klineH.Register(auth)
 	recommendH.Register(auth)
+	signalH.Register(auth)
 
 	// Admin routes
 	admin := auth.Group("/admin", middleware.AdminRequired())

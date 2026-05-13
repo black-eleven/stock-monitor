@@ -70,6 +70,20 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     created_at TEXT NOT NULL,
     is_active  INTEGER DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS signal_history (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol      TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    buy_score   REAL NOT NULL DEFAULT 0,
+    buy_pct     REAL NOT NULL DEFAULT 0,
+    sell_score  REAL NOT NULL DEFAULT 0,
+    sell_pct    REAL NOT NULL DEFAULT 0,
+    buy_count   INTEGER NOT NULL DEFAULT 0,
+    sell_count  INTEGER NOT NULL DEFAULT 0,
+    user_id     INTEGER DEFAULT 0,
+    UNIQUE(symbol, date, user_id)
+);
 `
 
 func Open(dataDir string) (*sql.DB, error) {

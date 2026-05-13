@@ -122,19 +122,32 @@ class KlineComponent {
       this._maLines.push(line);
     }
 
-    // Draw sell signal markers
+    // Draw cross markers (golden cross / death cross)
+    const crossMarkers = [];
+    for (let i = 1; i < ma5.length && i < ma20.length; i++) {
+      if (ma5[i - 1].value <= ma20[i - 1].value && ma5[i].value > ma20[i].value) {
+        crossMarkers.push({ time: ma5[i].time, position: 'belowBar', color: '#3fb950', shape: 'arrowUp', text: '金叉' });
+      } else if (ma5[i - 1].value >= ma20[i - 1].value && ma5[i].value < ma20[i].value) {
+        crossMarkers.push({ time: ma5[i].time, position: 'aboveBar', color: '#f85149', shape: 'arrowDown', text: '死叉' });
+      }
+    }
+
+    // Draw buy/sell signal markers for latest bar
     const rsi = calcRSI(bars, 14);
     const macd = calcMACD(bars);
-    const signals = evaluateSignals(bars, { ma5, ma20, ma60 }, rsi, macd);
-    if (signals.count > 0) {
-      const lastBar = bars[bars.length - 1];
-      this.candleSeries.setMarkers([{
-        time: lastBar.time,
-        position: 'aboveBar',
-        color: '#f85149',
-        shape: 'arrowDown',
-        text: 'S ' + signals.count,
-      }]);
+    const sellSignals = evaluateSignals(bars, { ma5, ma20, ma60 }, rsi, macd);
+    const buySignals = evaluateBuySignals(bars, { ma5, ma20, ma60 }, rsi, macd);
+    const lastBar = bars[bars.length - 1];
+
+    if (sellSignals.count > 0) {
+      crossMarkers.push({ time: lastBar.time, position: 'aboveBar', color: '#f85149', shape: 'arrowDown', text: 'S' + sellSignals.count });
+    }
+    if (buySignals.count > 0) {
+      crossMarkers.push({ time: lastBar.time, position: 'belowBar', color: '#3fb950', shape: 'arrowUp', text: 'B' + buySignals.count });
+    }
+
+    if (crossMarkers.length > 0) {
+      this.candleSeries.setMarkers(crossMarkers);
     }
   }
 

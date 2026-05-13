@@ -4,6 +4,8 @@ class AnalysisComponent {
     this.watchlist = [];
     this.results = new Map();
     this._currentMode = 'sell';
+    this._sortMode = 'score';
+    this._exchangeFilter = 'ALL';
   }
 
   async init() {
@@ -39,6 +41,28 @@ class AnalysisComponent {
     const buySignals = evaluateBuySignals(bars, { ma5, ma20, ma60 }, rsi, macd);
 
     this.results.set(symbol, { bars, ma5, ma20, ma60, rsi, macd, signals: sellSignals, buySignals });
+
+    // Record signals to backend
+    this._recordSignal(symbol, buySignals, sellSignals);
+  }
+
+  async _recordSignal(symbol, buySignals, sellSignals) {
+    try {
+      const buyPct = Math.round((buySignals.score / buySignals.maxScore) * 100);
+      const sellPct = Math.round((sellSignals.score / sellSignals.maxScore) * 100);
+      const resp = await this.api.post('/api/signals/record', {
+        symbol,
+        buyScore: Math.round(buySignals.score * 100) / 100,
+        buyPct,
+        sellScore: Math.round(sellSignals.score * 100) / 100,
+        sellPct,
+        buyCount: buySignals.count,
+        sellCount: sellSignals.count,
+      });
+      if (resp && resp.alert) {
+        showToast('⚠ ' + resp.alert.message, 'alert');
+      }
+    } catch (_) {}
   }
 
   async render() {
@@ -57,8 +81,34 @@ class AnalysisComponent {
     html += '<button id="analysisSellBtn" style="flex:1;padding:8px;border:1px solid #30363d;background:' + (this._currentMode === 'sell' ? '#1f6feb' : '#161b22') + ';color:#e6edf3;border-radius:6px;cursor:pointer;font-size:14px;">卖出分析</button>';
     html += '<button id="analysisBuyBtn" style="flex:1;padding:8px;border:1px solid #30363d;background:' + (this._currentMode === 'buy' ? '#1f6feb' : '#161b22') + ';color:#e6edf3;border-radius:6px;cursor:pointer;font-size:14px;">买入推荐</button>';
     html += '</div>';
+
+    // Sort and exchange filter bar
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap;">';
+    html += '<button id="analysisSortBtn" style="padding:4px 10px;border:1px solid #30363d;background:#161b22;color:#e6edf3;border-radius:12px;cursor:pointer;font-size:12px;">' + (this._sortMode === 'score' ? '按信号' : '按名称') + '</button>';
+    html += '<span style="color:#484f58;margin:0 4px;">|</span>';
+    var exchanges = ['ALL', 'US', 'HK', 'SH', 'SZ'];
+    var exchangeLabels = {ALL: '全部', US: 'US', HK: 'HK', SH: 'SH', SZ: 'SZ'};
+    for (var i = 0; i < exchanges.length; i++) {
+      var ex = exchanges[i];
+      var isActive = this._exchangeFilter === ex;
+      html += '<button class="analysisExBtn" data-ex="' + ex + '" style="padding:4px 10px;border:1px solid #30363d;background:' + (isActive ? '#1f6feb' : '#161b22') + ';color:#e6edf3;border-radius:12px;cursor:pointer;font-size:12px;">' + exchangeLabels[ex] + '</button>';
+    }
+    html += '</div>';
+
     html += '<div id="analysisInner"></div>';
     container.innerHTML = html;
+
+    document.getElementById('analysisSortBtn').addEventListener('click', function() {
+      this._sortMode = this._sortMode === 'score' ? 'name' : 'score';
+      this._showToggleView();
+    }.bind(this));
+
+    container.querySelectorAll('.analysisExBtn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        this._exchangeFilter = btn.dataset.ex;
+        this._showToggleView();
+      }.bind(this));
+    }, this);
 
     document.getElementById('analysisSellBtn').addEventListener('click', function() {
       this._currentMode = 'sell';
@@ -77,14 +127,56 @@ class AnalysisComponent {
     }
   }
 
+  _getFilteredSorted(signalsKey) {
+    var items = [];
+    for (var wi = 0; wi < this.watchlist.length; wi++) {
+      var w = this.watchlist[wi];
+      var result = this.results.get(w.symbol);
+      if (!result) continue;
+
+      if (this._exchangeFilter !== 'ALL') {
+        if (w.symbol.indexOf(this._exchangeFilter + ':') !== 0) continue;
+      }
+
+      items.push({
+        symbol: w.symbol,
+        name: w.name,
+        result: result,
+        score: result[signalsKey].score,
+        maxScore: result[signalsKey].maxScore
+      });
+    }
+
+    if (this._sortMode === 'score') {
+      items.sort(function(a, b) {
+        var pctA = a.maxScore > 0 ? a.score / a.maxScore : 0;
+        var pctB = b.maxScore > 0 ? b.score / b.maxScore : 0;
+        return pctB - pctA;
+      });
+    } else {
+      items.sort(function(a, b) {
+        return a.name.localeCompare(b.name, 'zh');
+      });
+    }
+
+    return items;
+  }
+
   _renderList() {
     const container = document.getElementById('analysisInner');
 
+    const items = this._getFilteredSorted('signals');
+
+    if (items.length === 0) {
+      container.innerHTML = '<div class="empty-state">该交易所暂无数据</div>';
+      return;
+    }
+
     let totalScore = 0;
     let totalMaxScore = 0;
-    for (const [, result] of this.results) {
-      totalScore += result.signals.score;
-      totalMaxScore += result.signals.maxScore;
+    for (var i = 0; i < items.length; i++) {
+      totalScore += items[i].score;
+      totalMaxScore += items[i].maxScore;
     }
     const avgPct = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
 
@@ -103,11 +195,10 @@ class AnalysisComponent {
     let html = '<div class="analysis-summary" style="color:' + summaryColor + '">卖出指数 <strong style="font-size:28px">' + avgPct + '%</strong> — ' + summaryLabel + '</div>';
     html += '<div class="analysis-cards">';
 
-    for (const w of this.watchlist) {
-      const result = this.results.get(w.symbol);
-      if (!result) continue;
-
-      const pct = Math.round((result.signals.score / result.signals.maxScore) * 100);
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var result = item.result;
+      var pct = Math.round((item.score / item.maxScore) * 100);
 
       let pctColor;
       if (pct >= 50) {
@@ -130,10 +221,10 @@ class AnalysisComponent {
       const latestBar = result.bars[result.bars.length - 1];
       const price = formatPrice(latestBar.close);
 
-      html += '<div class="analysis-card' + (cardClass ? ' ' + cardClass : '') + '" data-symbol="' + escapeHtml(w.symbol) + '">';
+      html += '<div class="analysis-card' + (cardClass ? ' ' + cardClass : '') + '" data-symbol="' + escapeHtml(item.symbol) + '">';
       html += '<div class="analysis-card-header">';
-      html += '<span class="name">' + escapeHtml(w.name) + '</span>';
-      html += '<span class="symbol">' + escapeHtml(shortCode(w.symbol)) + '</span>';
+      html += '<span class="name">' + escapeHtml(item.name) + '</span>';
+      html += '<span class="symbol">' + escapeHtml(shortCode(item.symbol)) + '</span>';
       html += '<span class="price">' + escapeHtml(price) + '</span>';
       html += '</div>';
       html += '<div class="analysis-card-signals">卖出指数 <strong style="font-size:18px;color:' + pctColor + '">' + pct + '%</strong> (' + result.signals.count + '/' + result.signals.total + ')</div>';
@@ -212,11 +303,18 @@ class AnalysisComponent {
   _renderBuyList() {
     const container = document.getElementById('analysisInner');
 
+    const items = this._getFilteredSorted('buySignals');
+
+    if (items.length === 0) {
+      container.innerHTML = '<div class="empty-state">该交易所暂无数据</div>';
+      return;
+    }
+
     let totalScore = 0;
     let totalMaxScore = 0;
-    for (const [, result] of this.results) {
-      totalScore += result.buySignals.score;
-      totalMaxScore += result.buySignals.maxScore;
+    for (var i = 0; i < items.length; i++) {
+      totalScore += items[i].score;
+      totalMaxScore += items[i].maxScore;
     }
     const avgPct = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
 
@@ -235,11 +333,10 @@ class AnalysisComponent {
     let html = '<div class="analysis-summary" style="color:' + summaryColor + '">买入指数 <strong style="font-size:28px">' + avgPct + '%</strong> — ' + summaryLabel + '</div>';
     html += '<div class="analysis-cards">';
 
-    for (const w of this.watchlist) {
-      const result = this.results.get(w.symbol);
-      if (!result) continue;
-
-      const pct = Math.round((result.buySignals.score / result.buySignals.maxScore) * 100);
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var result = item.result;
+      var pct = Math.round((item.score / item.maxScore) * 100);
 
       let pctColor;
       if (pct >= 50) {
@@ -262,10 +359,10 @@ class AnalysisComponent {
       const latestBar = result.bars[result.bars.length - 1];
       const price = formatPrice(latestBar.close);
 
-      html += '<div class="analysis-card' + (cardClass ? ' ' + cardClass : '') + '" data-symbol="' + escapeHtml(w.symbol) + '">';
+      html += '<div class="analysis-card' + (cardClass ? ' ' + cardClass : '') + '" data-symbol="' + escapeHtml(item.symbol) + '">';
       html += '<div class="analysis-card-header">';
-      html += '<span class="name">' + escapeHtml(w.name) + '</span>';
-      html += '<span class="symbol">' + escapeHtml(shortCode(w.symbol)) + '</span>';
+      html += '<span class="name">' + escapeHtml(item.name) + '</span>';
+      html += '<span class="symbol">' + escapeHtml(shortCode(item.symbol)) + '</span>';
       html += '<span class="price">' + escapeHtml(price) + '</span>';
       html += '</div>';
       html += '<div class="analysis-card-signals">买入指数 <strong style="font-size:18px;color:' + pctColor + '">' + pct + '%</strong> (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';

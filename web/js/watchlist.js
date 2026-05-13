@@ -6,6 +6,7 @@ class WatchlistComponent {
     this.watchlist = [];
     this.quotes = {};        // code -> quote
     this.selectedSymbol = null;
+    this.signalProvider = null;
   }
 
   async init() {
@@ -60,8 +61,26 @@ class WatchlistComponent {
       const dir = q ? changeDir(q.price, q.yp) : '';
       const changeText = q ? (changePct >= 0 ? '+' : '') + changePct.toFixed(2) + '%' : '--';
       const active = w.symbol === this.selectedSymbol ? 'active' : '';
+
+      // Signal badge
+      let signalBadge = '';
+      if (this.signalProvider) {
+        const sig = this.signalProvider(w.symbol);
+        if (sig) {
+          if (sig.buyPct >= 50) {
+            signalBadge = '<span style="background:#1a7f37;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-left:4px;">B' + sig.buyPct + '</span>';
+          } else if (sig.sellPct >= 50) {
+            signalBadge = '<span style="background:#da3633;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-left:4px;">S' + sig.sellPct + '</span>';
+          } else if (sig.buyPct >= 25) {
+            signalBadge = '<span style="background:#9e6a03;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-left:4px;">B' + sig.buyPct + '</span>';
+          } else if (sig.sellPct >= 25) {
+            signalBadge = '<span style="background:#9e6a03;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-left:4px;">S' + sig.sellPct + '</span>';
+          }
+        }
+      }
+
       return `<div class="stock-tab ${active}" data-symbol="${escapeHtml(w.symbol)}">
-        <span class="name">${escapeHtml(w.name)}</span>
+        <span class="name">${escapeHtml(w.name)}${signalBadge}</span>
         <span class="symbol">${escapeHtml(shortCode(w.symbol))}</span>
         <span class="change ${dir}">${changeText}</span>
       </div>`;
@@ -108,6 +127,26 @@ class WatchlistComponent {
 
     // Delete button always shown
     el.insertAdjacentHTML('beforeend', '<button class="btn btn-danger btn-sm" style="margin-top:12px" id="removeStockBtn">删除自选</button>');
+
+    // Signal summary from analysis component (if available)
+    if (this.signalProvider) {
+      const signals = this.signalProvider(symbol);
+      if (signals) {
+        var signalHtml = '';
+        if (signals.buyPct >= 50) {
+          signalHtml = '<span style="background:#1a7f37;color:#fff;padding:4px 10px;border-radius:12px;font-size:12px;">买入 ' + signals.buyPct + '% &middot; ' + signals.buyCount + '信号</span>';
+        } else if (signals.sellPct >= 50) {
+          signalHtml = '<span style="background:#da3633;color:#fff;padding:4px 10px;border-radius:12px;font-size:12px;">卖出 ' + signals.sellPct + '% &middot; ' + signals.sellCount + '信号</span>';
+        } else if (signals.buyPct >= 25) {
+          signalHtml = '<span style="background:#9e6a03;color:#fff;padding:4px 10px;border-radius:12px;font-size:12px;">关注买入 ' + signals.buyPct + '%</span>';
+        } else if (signals.sellPct >= 25) {
+          signalHtml = '<span style="background:#9e6a03;color:#fff;padding:4px 10px;border-radius:12px;font-size:12px;">偏弱 ' + signals.sellPct + '%</span>';
+        } else {
+          signalHtml = '<span style="color:#8b949e;font-size:12px;">暂无明确信号</span>';
+        }
+        el.insertAdjacentHTML('beforeend', '<div style="margin-top:12px;display:flex;align-items:center;gap:8px;">' + signalHtml + '</div>');
+      }
+    }
 
     document.getElementById('removeStockBtn')?.addEventListener('click', async () => {
       const code = symbol;

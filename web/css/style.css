@@ -156,3 +156,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .btn-success { background: #238636; border-color: #238636; color: #fff; }
 .btn-success:hover { background: #2ea043; }
 .rec-meta { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: #8b949e; }
+
+/* Recommend signal row */
+.rec-name-sub { font-size: 12px; color: #8b949e; }
+.rec-signal-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .2s; }
+.rec-signal-row:hover { filter: brightness(1.2); }
+.rec-signal-loading { color: #8b949e; cursor: default; }
+.rec-signal-strong-buy { background: rgba(63,185,80,.12); color: #3fb950; }
+.rec-signal-strong-sell { background: rgba(248,81,73,.12); color: #f85149; }
+.rec-signal-watch { background: rgba(210,153,34,.12); color: #d29922; }
+.rec-signal-none { background: rgba(139,148,158,.08); color: #8b949e; }
+
+/* Recommend detail modal */
+.rec-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.rec-detail-modal { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; width: 640px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
+.rec-detail-modal h3 { color: #e6edf3; }
+.rec-detail-modal h4 { font-size: 15px; }

@@ -125,6 +125,25 @@ async function init() {
   analysisComp = new AnalysisComponent(api);
   await analysisComp.init();
 
+  // Wire analysis signal data into watchlist detail view
+  watchlistComp.signalProvider = (symbol) => {
+    const result = analysisComp.results.get(symbol);
+    if (!result) return null;
+    return {
+      buyPct: Math.round((result.buySignals.score / result.buySignals.maxScore) * 100),
+      sellPct: Math.round((result.signals.score / result.signals.maxScore) * 100),
+      buyCount: result.buySignals.count,
+      sellCount: result.signals.count,
+    };
+  };
+
+  // Refresh watchlist tabs and detail to show signal badges after analysis completes
+  watchlistComp.renderTabs();
+  if (watchlistComp.selectedSymbol) {
+    const quote = watchlistComp.quotes[watchlistComp.selectedSymbol];
+    watchlistComp.renderDetail(watchlistComp.selectedSymbol, quote);
+  }
+
   // Update kline symbols from watchlist
   klineComp.updateSymbols(watchlistComp.watchlist);
 

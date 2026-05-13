@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
 import '../../core/utils.dart';
+import '../../domain/indicators.dart';
+import '../../domain/model/kline.dart';
 import '../../domain/model/stock.dart';
 import '../../domain/model/recommendation.dart';
 import '../providers/api_providers.dart';
 import '../providers/quote_provider.dart';
+import '../widgets/recommend_detail_sheet.dart';
 import '../widgets/stock_card.dart';
 
 class WatchlistScreen extends ConsumerStatefulWidget {
@@ -17,6 +20,8 @@ class WatchlistScreen extends ConsumerStatefulWidget {
 class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     with SingleTickerProviderStateMixin {
   List<WatchlistItem>? _watchlist;
+  Map<String, SignalResult>? _buySignals;
+  Map<String, SignalResult>? _sellSignals;
   late TabController _tabController;
 
   @override
@@ -36,6 +41,45 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     final api = ref.read(watchlistApiProvider);
     final list = await api.getAll();
     setState(() => _watchlist = list);
+    if (list.isNotEmpty) {
+      await _fetchWatchlistSignals(list);
+    }
+  }
+
+  Future<void> _fetchWatchlistSignals(List<WatchlistItem> items) async {
+    final quoteApi = ref.read(quoteApiProvider);
+    final buySignals = <String, SignalResult>{};
+    final sellSignals = <String, SignalResult>{};
+
+    final futures = items.map((item) async {
+      try {
+        final data =
+            await quoteApi.getKline(item.symbol, interval: '1d', count: 100);
+        final bars = <Bar>[];
+        for (final item in data) {
+          for (final k in item.k) {
+            bars.add(Bar(
+                time: k.ts,
+                open: k.o,
+                high: k.h,
+                low: k.l,
+                close: k.cl,
+                volume: k.v));
+          }
+        }
+        bars.sort((a, b) => a.time.compareTo(b.time));
+        buySignals[item.symbol] = evaluateBuySignals(bars);
+        sellSignals[item.symbol] = evaluateSignals(bars);
+      } catch (_) {}
+    });
+
+    await Future.wait(futures);
+    if (mounted) {
+      setState(() {
+        _buySignals = buySignals;
+        _sellSignals = sellSignals;
+      });
+    }
   }
 
   Future<void> _add() async {
@@ -76,6 +120,8 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
       builder: (_) => StockDetailSheet(
         item: item,
         quote: quote,
+        buySignal: _buySignals?[item.symbol],
+        sellSignal: _sellSignals?[item.symbol],
         onDelete: () async {
           await ref.read(watchlistApiProvider).remove(item.symbol);
           _load();
@@ -132,6 +178,8 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
         return StockCard(
           item: item,
           quote: quotes[item.symbol],
+          buySignal: _buySignals?[item.symbol],
+          sellSignal: _sellSignals?[item.symbol],
           onTap: () => _showDetail(item),
           onDelete: () async {
             await ref.read(watchlistApiProvider).remove(item.symbol);
@@ -180,6 +228,8 @@ class _RecommendTab extends StatefulWidget {
 class _RecommendTabState extends State<_RecommendTab> {
   final _controller = TextEditingController();
   List<Recommendation>? _recs;
+  Map<String, SignalResult>? _buySignals;
+  Map<String, SignalResult>? _sellSignals;
   String? _error;
   bool _loading = false;
 
@@ -197,6 +247,8 @@ class _RecommendTabState extends State<_RecommendTab> {
       _loading = true;
       _error = null;
       _recs = null;
+      _buySignals = null;
+      _sellSignals = null;
     });
 
     try {
@@ -205,15 +257,48 @@ class _RecommendTabState extends State<_RecommendTab> {
       final recs = await api.recommend(industry);
       setState(() {
         _recs = recs;
-        _loading = false;
         if (recs.isEmpty) {
           _error = '未找到相关推荐';
         }
       });
+      if (recs.isNotEmpty) {
+        await _fetchSignals(recs);
+      }
+      setState(() => _loading = false);
     } catch (e) {
       setState(() {
         _error = '获取推荐失败: $e';
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchSignals(List<Recommendation> recs) async {
+    final container = ProviderScope.containerOf(context);
+    final quoteApi = container.read(quoteApiProvider);
+    final buySignals = <String, SignalResult>{};
+    final sellSignals = <String, SignalResult>{};
+
+    final futures = recs.map((rec) async {
+      try {
+        final data = await quoteApi.getKline(rec.symbol, interval: '1d', count: 100);
+        final bars = <Bar>[];
+        for (final item in data) {
+          for (final k in item.k) {
+            bars.add(Bar(time: k.ts, open: k.o, high: k.h, low: k.l, close: k.cl, volume: k.v));
+          }
+        }
+        bars.sort((a, b) => a.time.compareTo(b.time));
+        buySignals[rec.symbol] = evaluateBuySignals(bars);
+        sellSignals[rec.symbol] = evaluateSignals(bars);
+      } catch (_) {}
+    });
+
+    await Future.wait(futures);
+    if (mounted) {
+      setState(() {
+        _buySignals = buySignals;
+        _sellSignals = sellSignals;
       });
     }
   }
@@ -271,20 +356,50 @@ class _RecommendTabState extends State<_RecommendTab> {
         final r = _recs![i];
         return _RecommendCard(
           rec: r,
+          buySignal: _buySignals?[r.symbol],
+          sellSignal: _sellSignals?[r.symbol],
+          signalsLoading: _buySignals == null,
           onAdd: () => widget.onAddToWatchlist(r.symbol, r.name),
           onTap: () => widget.onOpenKline(r.symbol),
+          onDetailTap: () => _showRecommendDetail(r),
         );
       },
     );
   }
 }
 
+  void _showRecommendDetail(Recommendation rec) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => RecommendDetailSheet(
+        rec: rec,
+        buySignal: _buySignals?[rec.symbol],
+        sellSignal: _sellSignals?[rec.symbol],
+        onAdd: () => widget.onAddToWatchlist(rec.symbol, rec.name),
+      ),
+    );
+  }
+}
+
 class _RecommendCard extends StatelessWidget {
   final Recommendation rec;
+  final SignalResult? buySignal;
+  final SignalResult? sellSignal;
+  final bool signalsLoading;
   final VoidCallback onAdd;
   final VoidCallback onTap;
+  final VoidCallback onDetailTap;
 
-  const _RecommendCard({required this.rec, required this.onAdd, required this.onTap});
+  const _RecommendCard({
+    required this.rec,
+    this.buySignal,
+    this.sellSignal,
+    required this.signalsLoading,
+    required this.onAdd,
+    required this.onTap,
+    required this.onDetailTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -311,8 +426,16 @@ class _RecommendCard extends StatelessWidget {
                     child: Text('#${rec.rank}', style: const TextStyle(fontSize: 12, color: AppTheme.up, fontWeight: FontWeight.w700)),
                   ),
                   const SizedBox(width: 8),
-                  Text(rec.symbol, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: AppTheme.textPrimary)),
-                  const Spacer(),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(rec.symbol, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: AppTheme.textPrimary)),
+                        if (rec.name.isNotEmpty && rec.name != rec.symbol)
+                          Text(rec.name, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
                   if (rec.price > 0)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -356,9 +479,63 @@ class _RecommendCard extends StatelessWidget {
                   Text('综合评分 ${(rec.score * 100).toStringAsFixed(0)}', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withAlpha(150))),
                 ],
               ),
+              if (buySignal != null || sellSignal != null || signalsLoading) ...[
+                const SizedBox(height: 6),
+                _buildSignalRow(),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSignalRow() {
+    if (signalsLoading) {
+      return Row(
+        children: [
+          Icon(Icons.show_chart, size: 14, color: AppTheme.textSecondary.withAlpha(150)),
+          const SizedBox(width: 4),
+          Text('加载技术信号...', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withAlpha(150))),
+        ],
+      );
+    }
+
+    final buyPct = buySignal != null ? (buySignal!.score / buySignal!.maxScore * 100) : 0.0;
+    final sellPct = sellSignal != null ? (sellSignal!.score / sellSignal!.maxScore * 100) : 0.0;
+
+    final hasBuy = buySignal != null && buyPct >= 25;
+    final hasSell = sellSignal != null && sellPct >= 25;
+
+    Color signalColor;
+    String text;
+    if (hasBuy && buyPct >= 50) {
+      signalColor = AppTheme.up;
+      text = '强烈买入 ${buyPct.toStringAsFixed(0)}% · ${buySignal!.count}信号';
+    } else if (hasSell && sellPct >= 50) {
+      signalColor = AppTheme.down;
+      text = '强烈卖出 ${sellPct.toStringAsFixed(0)}% · ${sellSignal!.count}信号';
+    } else if (hasBuy) {
+      signalColor = Colors.orange;
+      text = '值得关注 ${buyPct.toStringAsFixed(0)}% · ${buySignal!.count}信号';
+    } else if (hasSell) {
+      signalColor = Colors.orange;
+      text = '偏弱 ${sellPct.toStringAsFixed(0)}% · ${sellSignal!.count}信号';
+    } else {
+      signalColor = AppTheme.textSecondary;
+      text = '暂无明确信号';
+    }
+
+    return GestureDetector(
+      onTap: onDetailTap,
+      child: Row(
+        children: [
+          Icon(Icons.show_chart, size: 14, color: signalColor),
+          const SizedBox(width: 4),
+          Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: signalColor)),
+          const Spacer(),
+          Icon(Icons.chevron_right, size: 16, color: signalColor),
+        ],
       ),
     );
   }
