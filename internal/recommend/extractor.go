@@ -18,7 +18,7 @@ var symbolPatterns = []struct {
 	// $TICKER format → US
 	{regexp.MustCompile(`\$([A-Z]{1,5})`), "US:$1"},
 	// TICKER.HK format → HK, strip leading zeros
-	{regexp.MustCompile(`(\d{4,5})\.HK`), "HK:$1"},
+	{regexp.MustCompile(`(\d{1,5})\.HK`), "HK:$1"},
 	// TICKER.SH format
 	{regexp.MustCompile(`(\d{6})\.SH`), "SH:$1"},
 	// TICKER.SZ format
