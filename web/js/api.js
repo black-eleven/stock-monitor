@@ -118,4 +118,8 @@ class ApiClient {
   async getKline(symbol, interval = '1d', count = 200) {
     return this.get(`/api/kline/${symbol}?interval=${interval}&count=${count}`);
   }
+
+  async recommend(industry) {
+    return this.post('/api/recommendations', { industry });
+  }
 }

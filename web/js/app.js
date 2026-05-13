@@ -1,6 +1,6 @@
 // Global instances
 const api = new ApiClient();
-let watchlistComp, klineComp, holdingsComp, alertsComp, analysisComp;
+let watchlistComp, klineComp, holdingsComp, alertsComp, analysisComp, recommendComp;
 
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -59,6 +59,62 @@ async function init() {
     klineComp.updateSymbols(watchlist);
   });
   await watchlistComp.init();
+
+  // Recommend component
+  recommendComp = new RecommendComponent(api, async (symbol, name) => {
+    await api.addWatchlist(symbol, name);
+    watchlistComp.watchlist.push({ symbol, name });
+    watchlistComp.renderTabs();
+    if (watchlistComp.watchlist.length === 1) {
+      watchlistComp.selectStock(symbol);
+    }
+    if (watchlistComp.onWatchlistChange) watchlistComp.onWatchlistChange(watchlistComp.watchlist);
+    klineComp.updateSymbols(watchlistComp.watchlist);
+  });
+
+  // Watchlist sub-tab switching
+  document.querySelectorAll('.subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const target = btn.dataset.subtab;
+      document.getElementById('watchlistMy').style.display = target === 'my' ? 'block' : 'none';
+      document.getElementById('watchlistRecommend').style.display = target === 'recommend' ? 'block' : 'none';
+      document.getElementById('addWatchlistBtn').style.display = target === 'my' ? '' : 'none';
+      // Resize chart if switching back to my tab
+      if (target === 'my' && watchlistComp && watchlistComp.selectedSymbol) {
+        setTimeout(() => {
+          window.dispatchEvent(new Event('resize'));
+        }, 100);
+      }
+    });
+  });
+
+  // Recommend search button
+  document.getElementById('recommendSearchBtn').addEventListener('click', async () => {
+    const input = document.getElementById('recommendIndustry');
+    const industry = input.value.trim();
+    if (!industry) return;
+
+    const statusEl = document.getElementById('recommendStatus');
+    const resultsEl = document.getElementById('recommendResults');
+    statusEl.innerHTML = '<div style="padding:20px;text-align:center;color:#8b949e;">搜索中...</div>';
+    resultsEl.innerHTML = '';
+
+    try {
+      const recs = await recommendComp.search(industry);
+      statusEl.style.display = 'none';
+      recommendComp.renderResults(recs);
+    } catch (err) {
+      statusEl.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`;
+      statusEl.style.display = 'block';
+    }
+  });
+
+  // Recommend search on Enter key
+  document.getElementById('recommendIndustry').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('recommendSearchBtn').click();
+  });
 
   holdingsComp = new HoldingsComponent(api);
   await holdingsComp.init();
