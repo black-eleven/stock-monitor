@@ -13,6 +13,7 @@ import (
 	"github.com/black-eleven/stock-monitor/internal/middleware"
 	"github.com/black-eleven/stock-monitor/internal/model"
 	"github.com/black-eleven/stock-monitor/internal/qos"
+	"github.com/black-eleven/stock-monitor/internal/recommend"
 	"github.com/black-eleven/stock-monitor/internal/repo"
 	"github.com/black-eleven/stock-monitor/internal/ws"
 
@@ -69,6 +70,12 @@ func main() {
 	holdingH := handler.NewHoldingHandler(holdingRepo)
 	quoteH := handler.NewQuoteHandler(qosClient)
 	klineH := handler.NewKlineHandler(qosClient)
+
+	// Recommender
+	newsapiClient := recommend.NewNewsAPIClient(cfg.NewsAPIKey)
+	recommender := recommend.NewRecommender(newsapiClient, qosClient, cfg.NewsAPIDays, cfg.NewsAPIPageSize)
+	recommendH := handler.NewRecommendHandler(recommender)
+
 	authH := handler.NewAuthHandler(userRepo, inviteCodeRepo, cfg.JwtSecret)
 	adminH := handler.NewAdminHandler(inviteCodeRepo)
 
@@ -86,6 +93,7 @@ func main() {
 	holdingH.Register(auth)
 	quoteH.Register(auth)
 	klineH.Register(auth)
+	recommendH.Register(auth)
 
 	// Admin routes
 	admin := auth.Group("/admin", middleware.AdminRequired())
