@@ -8,7 +8,7 @@ import (
 	"github.com/black-eleven/stock-monitor/internal/qos"
 )
 
-func Score(results []ExtractionResult, quotes map[string]*qos.Quote) []model.Recommendation {
+func Score(results []ExtractionResult, quotes map[string]*qos.Quote, limit int) []model.Recommendation {
 	if len(results) == 0 {
 		return []model.Recommendation{}
 	}
@@ -57,9 +57,8 @@ func Score(results []ExtractionResult, quotes map[string]*qos.Quote) []model.Rec
 		recs[i].Rank = i + 1
 	}
 
-	// Top 10
-	if len(recs) > 10 {
-		recs = recs[:10]
+	if len(recs) > limit {
+		recs = recs[:limit]
 	}
 
 	return recs

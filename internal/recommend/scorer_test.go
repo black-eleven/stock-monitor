@@ -17,7 +17,7 @@ func TestScore(t *testing.T) {
 		"US:AMD":  {Price: 80, YP: 82, Volume: 500000},
 	}
 
-	recs := Score(results, quotes)
+	recs := Score(results, quotes, 10)
 
 	if len(recs) == 0 {
 		t.Fatal("expected recommendations, got empty")
@@ -45,7 +45,7 @@ func TestScore(t *testing.T) {
 }
 
 func TestScoreEmpty(t *testing.T) {
-	recs := Score(nil, nil)
+	recs := Score(nil, nil, 10)
 	if recs == nil {
 		t.Error("expected empty slice, got nil")
 	}

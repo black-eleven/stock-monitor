@@ -23,7 +23,7 @@ func TestExtractStockSymbols(t *testing.T) {
 		},
 	}
 
-	results := Extract(articles)
+	results := Extract(articles, 15)
 
 	symbols := make(map[string]bool)
 	for _, r := range results {
@@ -64,7 +64,7 @@ func TestExtractStockSymbols(t *testing.T) {
 }
 
 func TestExtractEmpty(t *testing.T) {
-	results := Extract(nil)
+	results := Extract(nil, 15)
 	if len(results) != 0 {
 		t.Errorf("expected empty, got %d results", len(results))
 	}
@@ -84,7 +84,7 @@ func TestExtractTop15(t *testing.T) {
 			PublishedAt: "2026-05-13T10:00:00Z",
 		})
 	}
-	results := Extract(articles)
+	results := Extract(articles, 15)
 	if len(results) > 15 {
 		t.Errorf("expected max 15, got %d", len(results))
 	}

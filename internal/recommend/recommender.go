@@ -15,25 +15,29 @@ type cacheEntry struct {
 }
 
 type Recommender struct {
-	newsapi   *NewsAPIClient
-	qosClient *qos.QosClient
-	cache     map[string]*cacheEntry
-	cacheTTL  time.Duration
-	days      int
-	pageSize  int
-	languages []string
-	mu        sync.RWMutex
+	newsapi    *NewsAPIClient
+	qosClient  *qos.QosClient
+	cache      map[string]*cacheEntry
+	cacheTTL   time.Duration
+	days       int
+	pageSize   int
+	languages  []string
+	candidates int
+	limit      int
+	mu         sync.RWMutex
 }
 
-func NewRecommender(newsapi *NewsAPIClient, qosClient *qos.QosClient, days, pageSize int, languages []string) *Recommender {
+func NewRecommender(newsapi *NewsAPIClient, qosClient *qos.QosClient, days, pageSize int, languages []string, candidates, limit int) *Recommender {
 	return &Recommender{
-		newsapi:   newsapi,
-		qosClient: qosClient,
-		cache:     make(map[string]*cacheEntry),
-		cacheTTL:  30 * time.Minute,
-		days:      days,
-		pageSize:  pageSize,
-		languages: languages,
+		newsapi:    newsapi,
+		qosClient:  qosClient,
+		cache:      make(map[string]*cacheEntry),
+		cacheTTL:   30 * time.Minute,
+		days:       days,
+		pageSize:   pageSize,
+		languages:  languages,
+		candidates: candidates,
+		limit:      limit,
 	}
 }
 
@@ -58,7 +62,7 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	}
 
 	// 2. Extract stock symbols
-	results := Extract(articles)
+	results := Extract(articles, r.candidates)
 	if len(results) == 0 {
 		return []model.Recommendation{}, nil
 	}
@@ -66,8 +70,20 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	// 3. Fetch quotes for candidates
 	quotes := r.batchFetchQuotes(results)
 
+	// Filter candidates to only those QOS recognizes (has a quote)
+	validResults := make([]ExtractionResult, 0, len(results))
+	for _, res := range results {
+		if _, ok := quotes[res.Symbol]; ok {
+			validResults = append(validResults, res)
+		}
+	}
+	// If every candidate was rejected, fall back to original results rather than returning empty
+	if len(validResults) == 0 {
+		validResults = results
+	}
+
 	// 4. Score
-	recs := Score(results, quotes)
+	recs := Score(validResults, quotes, r.limit)
 
 	// 5. Cache
 	r.mu.Lock()

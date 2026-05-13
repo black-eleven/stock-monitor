@@ -73,7 +73,7 @@ func main() {
 
 	// Recommender
 	newsapiClient := recommend.NewNewsAPIClient(cfg.NewsAPIKey)
-	recommender := recommend.NewRecommender(newsapiClient, qosClient, cfg.NewsAPIDays, cfg.NewsAPIPageSize, cfg.NewsAPILanguages)
+	recommender := recommend.NewRecommender(newsapiClient, qosClient, cfg.NewsAPIDays, cfg.NewsAPIPageSize, cfg.NewsAPILanguages, cfg.RecommendCandidates, cfg.RecommendLimit)
 	recommendH := handler.NewRecommendHandler(recommender)
 
 	signalRepo := repo.NewSignalRepo(database)

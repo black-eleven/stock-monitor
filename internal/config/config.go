@@ -22,6 +22,8 @@ type Config struct {
 	NewsAPIDays         int
 	NewsAPIPageSize     int
 	NewsAPILanguages    []string
+	RecommendCandidates int
+	RecommendLimit      int
 }
 
 func Load() *Config {
@@ -73,6 +75,19 @@ func Load() *Config {
 		}
 	}
 
+	recommendCandidates := 20
+	if s := os.Getenv("RECOMMEND_CANDIDATES"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 5 && n <= 50 {
+			recommendCandidates = n
+		}
+	}
+	recommendLimit := 15
+	if s := os.Getenv("RECOMMEND_LIMIT"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 5 && n <= 50 {
+			recommendLimit = n
+		}
+	}
+
 	return &Config{
 		Port:          port,
 		QosKey:        qosKey,
@@ -81,10 +96,12 @@ func Load() *Config {
 		JwtSecret:     jwtSecret,
 		AdminPassword:          adminPassword,
 		ExplicitAdminPassword:  explicitAdminPassword,
-		NewsAPIKey:       newsAPIKey,
-		NewsAPIDays:      newsAPIDays,
-		NewsAPIPageSize:  newsAPIPageSize,
-		NewsAPILanguages: newsAPILanguages,
+		NewsAPIKey:          newsAPIKey,
+		NewsAPIDays:         newsAPIDays,
+		NewsAPIPageSize:     newsAPIPageSize,
+		NewsAPILanguages:    newsAPILanguages,
+		RecommendCandidates: recommendCandidates,
+		RecommendLimit:      recommendLimit,
 	}
 }
 
