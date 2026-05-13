@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type Config struct {
@@ -16,6 +17,9 @@ type Config struct {
 	JwtSecret             string
 	AdminPassword          string
 	ExplicitAdminPassword  bool
+	NewsAPIKey          string
+	NewsAPIDays         int
+	NewsAPIPageSize     int
 }
 
 func Load() *Config {
@@ -46,6 +50,20 @@ func Load() *Config {
 		log.Printf("[CONFIG] ADMIN_PASSWORD not set, generated: %s", adminPassword)
 	}
 
+	newsAPIKey := os.Getenv("NEWSAPI_KEY")
+	newsAPIDays := 7
+	if s := os.Getenv("NEWSAPI_DAYS"); s != "" {
+		if d, err := strconv.Atoi(s); err == nil && d > 0 {
+			newsAPIDays = d
+		}
+	}
+	newsAPIPageSize := 50
+	if s := os.Getenv("NEWSAPI_PAGE_SIZE"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 && n <= 100 {
+			newsAPIPageSize = n
+		}
+	}
+
 	return &Config{
 		Port:          port,
 		QosKey:        qosKey,
@@ -54,6 +72,9 @@ func Load() *Config {
 		JwtSecret:     jwtSecret,
 		AdminPassword:          adminPassword,
 		ExplicitAdminPassword:  explicitAdminPassword,
+		NewsAPIKey:      newsAPIKey,
+		NewsAPIDays:     newsAPIDays,
+		NewsAPIPageSize: newsAPIPageSize,
 	}
 }
 
