@@ -98,6 +98,8 @@ async function init() {
   document.getElementById('holdingForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
+    data.shares = parseFloat(data.shares) || 0;
+    data.avgCost = parseFloat(data.avgCost) || 0;
     try {
       await api.addHolding(data);
       hideModal('holdingModal');
