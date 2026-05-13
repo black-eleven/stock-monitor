@@ -51,6 +51,9 @@ func Load() *Config {
 	}
 
 	newsAPIKey := os.Getenv("NEWSAPI_KEY")
+	if newsAPIKey == "" {
+		log.Printf("[CONFIG] NEWSAPI_KEY not set — recommendation feature will be unavailable")
+	}
 	newsAPIDays := 7
 	if s := os.Getenv("NEWSAPI_DAYS"); s != "" {
 		if d, err := strconv.Atoi(s); err == nil && d > 0 {
