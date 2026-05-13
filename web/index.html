@@ -27,14 +27,28 @@
     <!-- Watchlist Tab -->
     <section id="tab-watchlist" class="tab-pane active">
       <div class="watchlist-header">
+        <div class="watchlist-subtabs">
+          <button class="subtab-btn active" data-subtab="my">我的自选</button>
+          <button class="subtab-btn" data-subtab="recommend">推荐发现</button>
+        </div>
         <button class="btn btn-primary" id="addWatchlistBtn">+ 添加自选股</button>
       </div>
-      <div class="index-bar" id="indexBar"></div>
-      <div class="stock-tabs" id="stockTabs"></div>
-      <div class="stock-detail" id="stockDetail">
-        <div class="empty-state">点击上方 + 添加自选股 开始</div>
+      <div id="watchlistMy">
+        <div class="index-bar" id="indexBar"></div>
+        <div class="stock-tabs" id="stockTabs"></div>
+        <div class="stock-detail" id="stockDetail">
+          <div class="empty-state">点击上方 + 添加自选股 开始</div>
+        </div>
+        <div class="chart-container" id="chartContainer"></div>
       </div>
-      <div class="chart-container" id="chartContainer"></div>
+      <div id="watchlistRecommend" style="display:none">
+        <div class="recommend-search">
+          <input type="text" id="recommendIndustry" placeholder="输入行业关键词 (如 AI, 新能源, 半导体)" />
+          <button class="btn btn-primary" id="recommendSearchBtn">搜索</button>
+        </div>
+        <div id="recommendStatus" class="empty-state">输入行业关键词搜索推荐股票</div>
+        <div id="recommendResults"></div>
+      </div>
     </section>
 
     <!-- Kline Tab -->
@@ -119,6 +133,7 @@
   <script src="js/auth.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/recommend.js"></script>
   <script src="js/watchlist.js"></script>
   <script src="js/kline.js"></script>
   <script src="js/holdings.js"></script>

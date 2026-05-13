@@ -7,17 +7,23 @@ import '../../domain/model/kline.dart';
 import '../../domain/model/stock.dart';
 import '../providers/api_providers.dart';
 
+enum _SortMode { score, name }
+
 class AnalysisScreen extends ConsumerStatefulWidget {
   const AnalysisScreen({super.key});
   @override
   ConsumerState<AnalysisScreen> createState() => _AnalysisScreenState();
 }
 
-class _AnalysisScreenState extends ConsumerState<AnalysisScreen> with SingleTickerProviderStateMixin {
+class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
+    with SingleTickerProviderStateMixin {
   List<_Result>? _sellResults;
   List<_Result>? _buyResults;
   bool _loading = true;
   late TabController _tabController;
+
+  _SortMode _sortMode = _SortMode.score;
+  String _exchangeFilter = 'ALL';
 
   @override
   void initState() {
@@ -40,21 +46,56 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> with SingleTick
     final buyResults = <_Result>[];
     for (final stock in watchlist) {
       try {
-        final data = await quoteApi.getKline(stock.symbol, interval: '1d', count: 100);
+        final data =
+            await quoteApi.getKline(stock.symbol, interval: '1d', count: 100);
         final bars = <Bar>[];
         for (final item in data) {
           for (final k in item.k) {
-            bars.add(Bar(time: k.ts, open: k.o, high: k.h, low: k.l, close: k.cl, volume: k.v));
+            bars.add(Bar(
+                time: k.ts,
+                open: k.o,
+                high: k.h,
+                low: k.l,
+                close: k.cl,
+                volume: k.v));
           }
         }
         bars.sort((a, b) => a.time.compareTo(b.time));
         sellResults.add(_Result(stock: stock, signal: evaluateSignals(bars)));
-        buyResults.add(_Result(stock: stock, signal: evaluateBuySignals(bars)));
+        buyResults
+            .add(_Result(stock: stock, signal: evaluateBuySignals(bars)));
       } catch (_) {}
     }
-    sellResults.sort((a, b) => b.signal.score.compareTo(a.signal.score));
-    buyResults.sort((a, b) => b.signal.score.compareTo(a.signal.score));
-    setState(() { _sellResults = sellResults; _buyResults = buyResults; _loading = false; });
+    _sort(sellResults);
+    _sort(buyResults);
+    setState(() {
+      _sellResults = sellResults;
+      _buyResults = buyResults;
+      _loading = false;
+    });
+  }
+
+  void _sort(List<_Result> results) {
+    switch (_sortMode) {
+      case _SortMode.score:
+        results.sort((a, b) => b.signal.score.compareTo(a.signal.score));
+        break;
+      case _SortMode.name:
+        results.sort((a, b) => a.stock.name.compareTo(b.stock.name));
+        break;
+    }
+  }
+
+  List<_Result> _applyFilter(List<_Result> results) {
+    if (_exchangeFilter == 'ALL') return results;
+    return results
+        .where((r) => r.stock.symbol.startsWith('$_exchangeFilter:'))
+        .toList();
+  }
+
+  String _exchangePrefix(String symbol) {
+    final idx = symbol.indexOf(':');
+    return idx > 0 ? symbol.substring(0, idx) : '';
   }
 
   @override
@@ -62,7 +103,9 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> with SingleTick
     return Scaffold(
       appBar: AppBar(
         title: const Text('技术分析'),
-        actions: [IconButton(onPressed: _analyze, icon: const Icon(Icons.refresh))],
+        actions: [
+          IconButton(onPressed: _analyze, icon: const Icon(Icons.refresh)),
+        ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: AppTheme.accent,
@@ -79,45 +122,133 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> with SingleTick
           : TabBarView(
               controller: _tabController,
               children: [
-                _buildSellView(),
-                _buildBuyView(),
+                _buildSignalView(false),
+                _buildSignalView(true),
               ],
             ),
     );
   }
 
-  Widget _buildSellView() {
-    if (_sellResults == null || _sellResults!.isEmpty) {
-      return const Center(child: Text('暂无数据', style: TextStyle(color: AppTheme.textSecondary)));
-    }
-    return Column(children: [
-      Container(padding: const EdgeInsets.all(12), color: AppTheme.surface, child: _buildSummary(_sellResults!, '卖出')),
-      Expanded(
-        child: ListView.builder(
-          itemCount: _sellResults!.length,
-          itemBuilder: (_, i) => _buildCard(_sellResults![i]),
+  Widget _buildFilterBar() {
+    const exchanges = ['ALL', 'US', 'HK', 'SH', 'SZ'];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(children: [
+        _sortBtn(),
+        const SizedBox(width: 8),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: exchanges.map((e) {
+                final selected = _exchangeFilter == e;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _exchangeFilter = e),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppTheme.accent
+                            : AppTheme.surface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: selected
+                                ? AppTheme.accent
+                                : AppTheme.border),
+                      ),
+                      child: Text(
+                        e == 'ALL' ? '全部' : e,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: selected
+                              ? Colors.white
+                              : AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         ),
-      ),
-    ]);
+      ]),
+    );
   }
 
-  Widget _buildBuyView() {
-    if (_buyResults == null || _buyResults!.isEmpty) {
-      return const Center(child: Text('暂无数据', style: TextStyle(color: AppTheme.textSecondary)));
+  Widget _sortBtn() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _sortMode =
+              _sortMode == _SortMode.score ? _SortMode.name : _SortMode.score;
+          if (_sellResults != null) _sort(_sellResults!);
+          if (_buyResults != null) _sort(_buyResults!);
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.border),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(
+            _sortMode == _SortMode.score
+                ? Icons.trending_down
+                : Icons.sort_by_alpha,
+            size: 14,
+            color: AppTheme.textSecondary,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            _sortMode == _SortMode.score ? '按信号' : '按名称',
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildSignalView(bool isBuy) {
+    final raw = isBuy ? _buyResults : _sellResults;
+    if (raw == null || raw.isEmpty) {
+      return const Center(
+          child:
+              Text('暂无数据', style: TextStyle(color: AppTheme.textSecondary)));
     }
+    final filtered = _applyFilter(raw);
+    if (filtered.isEmpty) {
+      return const Center(
+          child: Text('该交易所暂无数据',
+              style: TextStyle(color: AppTheme.textSecondary)));
+    }
+    final label = isBuy ? '买入' : '卖出';
     return Column(children: [
-      Container(padding: const EdgeInsets.all(12), color: AppTheme.surface, child: _buildSummary(_buyResults!, '买入')),
+      _buildFilterBar(),
+      Container(
+          padding: const EdgeInsets.all(12),
+          color: AppTheme.surface,
+          child: _buildSummary(filtered, label)),
       Expanded(
         child: ListView.builder(
-          itemCount: _buyResults!.length,
-          itemBuilder: (_, i) => _buildCard(_buyResults![i]),
+          itemCount: filtered.length,
+          itemBuilder: (_, i) => _buildCard(filtered[i]),
         ),
       ),
     ]);
   }
 
   Widget _buildSummary(List<_Result> results, String label) {
-    final avgScore = results.map((r) => r.signal.score / r.signal.maxScore).reduce((a, b) => a + b) / results.length;
+    final avgScore = results
+            .map((r) => r.signal.score / r.signal.maxScore)
+            .reduce((a, b) => a + b) /
+        results.length;
     final color = avgScore >= 0.5
         ? (label == '买入' ? AppTheme.up : AppTheme.down)
         : avgScore >= 0.25
@@ -129,10 +260,21 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> with SingleTick
             ? (label == '买入' ? '偏多' : '偏弱')
             : '正常';
     return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Text('平均${label}分 ', style: const TextStyle(color: AppTheme.textSecondary)),
-      Text('${(avgScore * 100).toStringAsFixed(1)}分', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: color)),
+      Text('平均${label}分 ',
+          style: const TextStyle(color: AppTheme.textSecondary)),
+      Text('${(avgScore * 100).toStringAsFixed(1)}分',
+          style: TextStyle(
+              fontSize: 24, fontWeight: FontWeight.w800, color: color)),
       const SizedBox(width: 12),
-      Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: color.withAlpha(40), borderRadius: BorderRadius.circular(12)), child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w600))),
+      Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+              color: color.withAlpha(40),
+              borderRadius: BorderRadius.circular(12)),
+          child: Text(text,
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.w600))),
     ]);
   }
 
@@ -147,11 +289,15 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> with SingleTick
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: ListTile(
-        title: Text('${r.stock.name} (${shortCode(r.stock.symbol)})', style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Text('${r.stock.name} (${shortCode(r.stock.symbol)})',
+            style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(r.signal.summary),
         trailing: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text('${(pct * 100).toStringAsFixed(0)}分', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-          Text('${r.signal.count}个信号', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          Text('${(pct * 100).toStringAsFixed(0)}分',
+              style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+          Text('${r.signal.count}个信号',
+              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
         ]),
         onTap: () => _showDetail(r),
       ),
@@ -174,21 +320,38 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> with SingleTick
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${r.stock.name} (${r.stock.symbol})', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            Text('${r.stock.name} (${r.stock.symbol})',
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text('评分: ${(pct * 100).toStringAsFixed(0)}分 — ${r.signal.summary}', style: TextStyle(color: color)),
+            Text(
+                '评分: ${(pct * 100).toStringAsFixed(0)}分 — ${r.signal.summary}',
+                style: TextStyle(color: color)),
             const SizedBox(height: 12),
-            Text('${r.signal.count} / ${r.signal.total} 个信号触发', style: const TextStyle(color: AppTheme.textSecondary)),
+            Text('${r.signal.count} / ${r.signal.total} 个信号触发',
+                style: const TextStyle(color: AppTheme.textSecondary)),
             const SizedBox(height: 8),
             ...r.signal.signals.where((s) => s.triggered).map((s) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(children: [
-                Icon(s.status == 'danger' ? Icons.circle : Icons.warning_amber, size: 14, color: s.status == 'danger' ? (isBuy ? AppTheme.up : AppTheme.down) : Colors.orange),
-                const SizedBox(width: 8),
-                Expanded(child: Text(s.name, style: const TextStyle(fontSize: 14))),
-                if (s.value != null) Text(s.value!, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-              ]),
-            )),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(children: [
+                    Icon(
+                        s.status == 'danger'
+                            ? Icons.circle
+                            : Icons.warning_amber,
+                        size: 14,
+                        color: s.status == 'danger'
+                            ? (isBuy ? AppTheme.up : AppTheme.down)
+                            : Colors.orange),
+                    const SizedBox(width: 8),
+                    Expanded(
+                        child:
+                            Text(s.name, style: const TextStyle(fontSize: 14))),
+                    if (s.value != null)
+                      Text(s.value!,
+                          style: const TextStyle(
+                              fontSize: 12, color: AppTheme.textSecondary)),
+                  ]),
+                )),
           ],
         ),
       ),
