@@ -35,7 +35,7 @@ func NewNewsAPIClient(apiKey string) *NewsAPIClient {
 	}
 }
 
-func (c *NewsAPIClient) Search(query string, days int, pageSize int) ([]Article, error) {
+func (c *NewsAPIClient) Search(query string, days int, pageSize int, language string) ([]Article, error) {
 	fromDate := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
 
 	u, _ := url.Parse(c.baseURL)
@@ -45,7 +45,7 @@ func (c *NewsAPIClient) Search(query string, days int, pageSize int) ([]Article,
 		"sortBy":   {"popularity"},
 		"pageSize": {fmt.Sprintf("%d", pageSize)},
 		"from":     {fromDate},
-		"language": {"en"},
+		"language": {language},
 	}.Encode()
 
 	resp, err := c.httpClient.Get(u.String())

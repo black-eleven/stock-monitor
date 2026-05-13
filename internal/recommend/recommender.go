@@ -21,10 +21,11 @@ type Recommender struct {
 	cacheTTL  time.Duration
 	days      int
 	pageSize  int
+	languages []string
 	mu        sync.RWMutex
 }
 
-func NewRecommender(newsapi *NewsAPIClient, qosClient *qos.QosClient, days, pageSize int) *Recommender {
+func NewRecommender(newsapi *NewsAPIClient, qosClient *qos.QosClient, days, pageSize int, languages []string) *Recommender {
 	return &Recommender{
 		newsapi:   newsapi,
 		qosClient: qosClient,
@@ -32,6 +33,7 @@ func NewRecommender(newsapi *NewsAPIClient, qosClient *qos.QosClient, days, page
 		cacheTTL:  30 * time.Minute,
 		days:      days,
 		pageSize:  pageSize,
+		languages: languages,
 	}
 }
 
@@ -45,8 +47,8 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	}
 	r.mu.RUnlock()
 
-	// 1. Search NewsAPI
-	articles, err := r.newsapi.Search(industry, r.days, r.pageSize)
+	// 1. Search NewsAPI for all configured languages concurrently
+	articles, err := r.searchAllLanguages(industry)
 	if err != nil {
 		return nil, fmt.Errorf("news search: %w", err)
 	}
@@ -76,6 +78,37 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	r.mu.Unlock()
 
 	return recs, nil
+}
+
+func (r *Recommender) searchAllLanguages(industry string) ([]Article, error) {
+	type result struct {
+		articles []Article
+		err      error
+	}
+
+	ch := make(chan result, len(r.languages))
+	for _, lang := range r.languages {
+		go func(language string) {
+			arts, err := r.newsapi.Search(industry, r.days, r.pageSize, language)
+			ch <- result{articles: arts, err: err}
+		}(lang)
+	}
+
+	var all []Article
+	var lastErr error
+	for i := 0; i < len(r.languages); i++ {
+		r := <-ch
+		if r.err != nil {
+			lastErr = r.err
+			continue
+		}
+		all = append(all, r.articles...)
+	}
+
+	if len(all) == 0 && lastErr != nil {
+		return nil, lastErr
+	}
+	return all, nil
 }
 
 func (r *Recommender) batchFetchQuotes(candidates []ExtractionResult) map[string]*qos.Quote {

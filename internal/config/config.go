@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -20,6 +21,7 @@ type Config struct {
 	NewsAPIKey          string
 	NewsAPIDays         int
 	NewsAPIPageSize     int
+	NewsAPILanguages    []string
 }
 
 func Load() *Config {
@@ -54,6 +56,10 @@ func Load() *Config {
 	if newsAPIKey == "" {
 		log.Printf("[CONFIG] NEWSAPI_KEY not set — recommendation feature will be unavailable")
 	}
+	newsAPILanguages := []string{"en", "zh"}
+	if s := os.Getenv("NEWSAPI_LANGUAGES"); s != "" {
+		newsAPILanguages = strings.Split(s, ",")
+	}
 	newsAPIDays := 7
 	if s := os.Getenv("NEWSAPI_DAYS"); s != "" {
 		if d, err := strconv.Atoi(s); err == nil && d > 0 {
@@ -75,9 +81,10 @@ func Load() *Config {
 		JwtSecret:     jwtSecret,
 		AdminPassword:          adminPassword,
 		ExplicitAdminPassword:  explicitAdminPassword,
-		NewsAPIKey:      newsAPIKey,
-		NewsAPIDays:     newsAPIDays,
-		NewsAPIPageSize: newsAPIPageSize,
+		NewsAPIKey:       newsAPIKey,
+		NewsAPIDays:      newsAPIDays,
+		NewsAPIPageSize:  newsAPIPageSize,
+		NewsAPILanguages: newsAPILanguages,
 	}
 }
 

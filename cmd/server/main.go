@@ -73,7 +73,7 @@ func main() {
 
 	// Recommender
 	newsapiClient := recommend.NewNewsAPIClient(cfg.NewsAPIKey)
-	recommender := recommend.NewRecommender(newsapiClient, qosClient, cfg.NewsAPIDays, cfg.NewsAPIPageSize)
+	recommender := recommend.NewRecommender(newsapiClient, qosClient, cfg.NewsAPIDays, cfg.NewsAPIPageSize, cfg.NewsAPILanguages)
 	recommendH := handler.NewRecommendHandler(recommender)
 
 	authH := handler.NewAuthHandler(userRepo, inviteCodeRepo, cfg.JwtSecret)
