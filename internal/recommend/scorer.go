@@ -5,10 +5,10 @@ import (
 	"sort"
 
 	"github.com/black-eleven/stock-monitor/internal/model"
-	"github.com/black-eleven/stock-monitor/internal/qos"
+	"github.com/black-eleven/stock-monitor/internal/eastmoney"
 )
 
-func Score(results []ExtractionResult, quotes map[string]*qos.Quote, limit int) []model.Recommendation {
+func Score(results []ExtractionResult, quotes map[string]*eastmoney.Quote, limit int) []model.Recommendation {
 	if len(results) == 0 {
 		return []model.Recommendation{}
 	}
@@ -71,7 +71,7 @@ func newsScore(r ExtractionResult, maxCount int) float64 {
 	return math.Min(freqScore+headlineScore+recencyScore, 1.0)
 }
 
-func trendScore(symbol string, quotes map[string]*qos.Quote) float64 {
+func trendScore(symbol string, quotes map[string]*eastmoney.Quote) float64 {
 	q, ok := quotes[symbol]
 	if !ok || q == nil || q.YP == 0 {
 		return 0.5

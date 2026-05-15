@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/black-eleven/stock-monitor/internal/qos"
+	"github.com/black-eleven/stock-monitor/internal/eastmoney"
 )
 
 func TestScore(t *testing.T) {
@@ -12,7 +12,7 @@ func TestScore(t *testing.T) {
 		{Symbol: "US:NVDA", Count: 10, HeadlineHits: 5, Highlights: []string{"NVIDIA reports record earnings"}},
 		{Symbol: "US:AMD", Count: 3, HeadlineHits: 1, Highlights: []string{"AMD also rose"}},
 	}
-	quotes := map[string]*qos.Quote{
+	quotes := map[string]*eastmoney.Quote{
 		"US:NVDA": {Price: 130, YP: 125, Volume: 1000000},
 		"US:AMD":  {Price: 80, YP: 82, Volume: 500000},
 	}

@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/black-eleven/stock-monitor/internal/eastmoney"
 	"github.com/black-eleven/stock-monitor/internal/model"
-	"github.com/black-eleven/stock-monitor/internal/qos"
 )
 
 type cacheEntry struct {
@@ -15,29 +15,29 @@ type cacheEntry struct {
 }
 
 type Recommender struct {
-	newsapi    *NewsAPIClient
-	qosClient  *qos.QosClient
-	cache      map[string]*cacheEntry
-	cacheTTL   time.Duration
-	days       int
-	pageSize   int
-	languages  []string
+	newsapi   *NewsAPIClient
+	emClient  eastmoney.QuoteClient
+	cache     map[string]*cacheEntry
+	cacheTTL  time.Duration
+	days      int
+	pageSize  int
+	languages []string
 	candidates int
-	limit      int
-	mu         sync.RWMutex
+	limit     int
+	mu        sync.RWMutex
 }
 
-func NewRecommender(newsapi *NewsAPIClient, qosClient *qos.QosClient, days, pageSize int, languages []string, candidates, limit int) *Recommender {
+func NewRecommender(newsapi *NewsAPIClient, emClient eastmoney.QuoteClient, days, pageSize int, languages []string, candidates, limit int) *Recommender {
 	return &Recommender{
-		newsapi:    newsapi,
-		qosClient:  qosClient,
-		cache:      make(map[string]*cacheEntry),
-		cacheTTL:   30 * time.Minute,
-		days:       days,
-		pageSize:   pageSize,
-		languages:  languages,
+		newsapi:   newsapi,
+		emClient:  emClient,
+		cache:     make(map[string]*cacheEntry),
+		cacheTTL:  30 * time.Minute,
+		days:      days,
+		pageSize:  pageSize,
+		languages: languages,
 		candidates: candidates,
-		limit:      limit,
+		limit:     limit,
 	}
 }
 
@@ -127,16 +127,16 @@ func (r *Recommender) searchAllLanguages(industry string) ([]Article, error) {
 	return all, nil
 }
 
-func (r *Recommender) batchFetchQuotes(candidates []ExtractionResult) map[string]*qos.Quote {
+func (r *Recommender) batchFetchQuotes(candidates []ExtractionResult) map[string]*eastmoney.Quote {
 	type result struct {
 		symbol string
-		quote  *qos.Quote
+		quote  *eastmoney.Quote
 	}
 
 	ch := make(chan result, len(candidates))
 	for _, c := range candidates {
 		go func(symbol string) {
-			q, err := r.qosClient.FetchQuoteCached(symbol)
+			q, err := r.emClient.FetchQuoteCached(symbol)
 			if err != nil {
 				ch <- result{symbol: symbol}
 			} else {
@@ -145,7 +145,7 @@ func (r *Recommender) batchFetchQuotes(candidates []ExtractionResult) map[string
 		}(c.Symbol)
 	}
 
-	quotes := make(map[string]*qos.Quote, len(candidates))
+	quotes := make(map[string]*eastmoney.Quote, len(candidates))
 	for i := 0; i < len(candidates); i++ {
 		r := <-ch
 		if r.quote != nil {
