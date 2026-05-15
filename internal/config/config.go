@@ -12,9 +12,7 @@ import (
 
 type Config struct {
 	Port           string
-	QosKey         string
 	DataDir        string
-	QosWsUrl       string
 	JwtSecret             string
 	AdminPassword          string
 	ExplicitAdminPassword  bool
@@ -30,11 +28,6 @@ func Load() *Config {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
-	}
-	qosKey := os.Getenv("QOS_KEY")
-	qosWsUrl := "wss://api.qos.hk/ws"
-	if qosKey != "" {
-		qosWsUrl += "?key=" + qosKey
 	}
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
@@ -90,9 +83,7 @@ func Load() *Config {
 
 	return &Config{
 		Port:          port,
-		QosKey:        qosKey,
 		DataDir:       absDataDir,
-		QosWsUrl:      qosWsUrl,
 		JwtSecret:     jwtSecret,
 		AdminPassword:          adminPassword,
 		ExplicitAdminPassword:  explicitAdminPassword,
