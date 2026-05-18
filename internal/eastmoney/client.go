@@ -386,6 +386,9 @@ func parseYahooKline(body []byte) ([]json.RawMessage, error) {
 		if i >= len(quote.Open) {
 			break
 		}
+			if quote.Close[i] == 0 && quote.Open[i] == 0 && quote.High[i] == 0 && quote.Low[i] == 0 {
+				continue
+			}
 		bar := map[string]interface{}{
 			"ts": ts, "o": quote.Open[i], "cl": quote.Close[i],
 			"h": quote.High[i], "l": quote.Low[i], "v": quote.Volume[i],
