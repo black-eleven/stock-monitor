@@ -93,14 +93,29 @@ class KlineComponent {
     }
   }
 
+  _getMAPeriods() {
+    switch (this.currentInterval) {
+      case '5m':  return [24, 48, 96];    // 2h, 4h, 8h
+      case '15m': return [16, 32, 64];    // 4h, 8h, 16h
+      case '30m': return [16, 32, 48];    // 8h, 16h, 24h
+      case '1h':  return [8, 20, 40];     // 1d, 2.5d, 5d
+      case '2h':  return [8, 16, 32];     // 2d, 4d, 8d
+      case '4h':  return [6, 12, 24];     // 2d, 4d, 8d
+      case '1w':  return [4, 13, 26];     // 1mo, 1qt, 2qt
+      case '1M':  return [3, 6, 12];      // 1qt, 2qt, 1yr
+      default:    return [5, 20, 60];     // 1d
+    }
+  }
+
   _drawIndicators(bars) {
     if (!bars || bars.length < 30) return;
     this._clearIndicators();
 
-    // Calculate indicators
-    const ma5 = calcMA(bars, 5);
-    const ma20 = calcMA(bars, 20);
-    const ma60 = calcMA(bars, 60);
+    // Calculate indicators with interval-scaled periods
+    const [p1, p2, p3] = this._getMAPeriods();
+    const ma5 = calcMA(bars, p1);
+    const ma20 = calcMA(bars, p2);
+    const ma60 = calcMA(bars, p3);
 
     // Store for cleanup
     this._maLines = [];
