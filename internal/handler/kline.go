@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -55,5 +56,13 @@ func (h *KlineHandler) getKline(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch kline data"})
 		return
 	}
-	c.JSON(http.StatusOK, data)
+
+	// Wrap in KlineItem format that frontend expects: [{"c": symbol, "k": [...]}]
+	if data == nil {
+		data = []json.RawMessage{}
+	}
+	wrap := []map[string]interface{}{
+		{"c": symbol, "k": data},
+	}
+	c.JSON(http.StatusOK, wrap)
 }
