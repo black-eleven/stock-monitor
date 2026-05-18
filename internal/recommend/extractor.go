@@ -17,6 +17,11 @@ var nonStockWords = map[string]bool{
 	"CPU": true, "RAM": true, "SSD": true, "HDD": true, "USB": true, "LCD": true,
 	"LED": true, "OLED": true, "IOT": true,
 	"ROI": true, "ROE": true, "YOY": true, "QOQ": true, "FYI": true, "FAQ": true,
+	// Common Chinese company/org abbreviations falsely matched as US tickers
+	"CFM": true, "CMB": true, "ICBC": true, "CCB": true, "BOC": true, "ABC": true,
+	"CCTV": true, "CNPC": true, "CNOOC": true, "COMAC": true, "CASC": true,
+	"SAIC": true, "BAIC": true, "GAC": true, "FAW": true, "DFM": true,
+	"CSRC": true, "CBRC": true, "NDRC": true, "MIIT": true, "MOFCOM": true,
 }
 
 var symbolPatterns = []struct {
@@ -36,8 +41,8 @@ var symbolPatterns = []struct {
 	{regexp.MustCompile(`(\d{6})\.SH`), "SH:$1"},
 	// TICKER.SZ format
 	{regexp.MustCompile(`(\d{6})\.SZ`), "SZ:$1"},
-	// (TICKER) parenthetical reference → US; require 2-5 chars, skip non-stock words
-	{regexp.MustCompile(`\(([A-Z]{2,5})\)`), "US:$1"},
+	// (TICKER) parenthetical reference → US; require 3-5 chars, skip non-stock words
+	{regexp.MustCompile(`\(([A-Z]{3,5})\)`), "US:$1"},
 }
 
 // isFakeHKCode filters out numbers unlikely to be real HK stock codes.

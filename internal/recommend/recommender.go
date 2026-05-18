@@ -77,11 +77,7 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 			validResults = append(validResults, res)
 		}
 	}
-	// If every candidate was rejected, fall back to original results rather than returning empty
-	if len(validResults) == 0 {
-		validResults = results
-	}
-
+	
 	// 4. Score
 	recs := Score(validResults, quotes, r.limit)
 
