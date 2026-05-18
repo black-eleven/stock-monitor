@@ -53,12 +53,19 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 		return []model.Recommendation{}, nil
 	}
 
-	// Fetch quotes for candidates
 	symbols := make([]string, 0, len(candidates))
 	for _, c := range candidates {
 		symbols = append(symbols, c.Symbol)
 	}
 	quotes := r.batchFetchQuotes(symbols)
+
+	// Find max volume for normalization (volume heat proxy)
+	maxVol := 0.0
+	for _, q := range quotes {
+		if q != nil && q.Volume > maxVol {
+			maxVol = q.Volume
+		}
+	}
 
 	// Score and build
 	total := len(candidates)
@@ -66,23 +73,29 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	for i, c := range candidates {
 		price := 0.0
 		changePercent := 0.0
+		volume := 0.0
 		hasQuote := false
 		if q, ok := quotes[c.Symbol]; ok && q != nil {
 			hasQuote = true
 			price = q.Price
+			volume = q.Volume
 			if q.YP != 0 {
 				changePercent = ((q.Price - q.YP) / q.YP) * 100
 			}
 		}
 
-		// Composite: LLM order 40% + Has quote 30% + Momentum 30%
+		// Composite: LLM 30% + Quote 25% + Momentum 25% + Volume 20%
 		llmScore := 1.0 - float64(i)/float64(total)
 		quoteScore := 0.0
 		if hasQuote {
 			quoteScore = 1.0
 		}
 		momentumScore := math.Max(0, math.Min(1, 0.5+changePercent*0.05))
-		finalScore := math.Round((llmScore*0.4+quoteScore*0.3+momentumScore*0.3)*100) / 100
+		volumeScore := 0.0
+		if maxVol > 0 && volume > 0 {
+			volumeScore = math.Min(1, volume/maxVol)
+		}
+		finalScore := math.Round((llmScore*0.3+quoteScore*0.25+momentumScore*0.25+volumeScore*0.2)*100) / 100
 
 		rec := model.Recommendation{
 			Symbol:        c.Symbol,
@@ -98,7 +111,6 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 		recs = append(recs, rec)
 	}
 
-	// Sort by score descending
 	sort.Slice(recs, func(i, j int) bool {
 		return recs[i].Score > recs[j].Score
 	})
@@ -110,7 +122,6 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 		recs[i].Rank = i + 1
 	}
 
-	// Cache
 	r.mu.Lock()
 	r.cache[industry] = &cacheEntry{
 		recs:      recs,
