@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const eastMoneyReferer = "https://quote.eastmoney.com/"
+
 // Quote represents a real-time stock quote.
 type Quote struct {
 	Code      string  `json:"code"`
@@ -45,6 +47,15 @@ func NewClient() *Client {
 		baseURL:      "http://push2.eastmoney.com/api/qt/stock/get",
 		klineBaseURL: "http://push2his.eastmoney.com/api/qt/stock/kline/get",
 	}
+}
+
+func (c *Client) doGet(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Referer", eastMoneyReferer)
+	return c.httpClient.Do(req)
 }
 
 // SetTrackedCodes sets the list of codes to poll for real-time quotes.
@@ -85,7 +96,7 @@ func (c *Client) BatchFetchQuotes(codes []string) (map[string]*Quote, error) {
 	fields := "f43,f44,f45,f46,f47,f48,f57,f60"
 	url := fmt.Sprintf("%s?secid=%s&fields=%s", c.baseURL, strings.Join(secIDs, ","), fields)
 
-	resp, err := c.httpClient.Get(url)
+	resp, err := c.doGet(url)
 	if err != nil {
 		return nil, fmt.Errorf("eastmoney batch quote: %w", err)
 	}
@@ -223,7 +234,7 @@ func (c *Client) FetchHistoryKline(code string, kt int, count int) ([]json.RawMe
 	url := fmt.Sprintf("%s?secid=%s&klt=%d&fqt=1&beg=%s&end=%s&lmt=%d",
 		c.klineBaseURL, secID, klt, beg, end, count)
 
-	resp, err := c.httpClient.Get(url)
+	resp, err := c.doGet(url)
 	if err != nil {
 		return nil, fmt.Errorf("eastmoney kline: %w", err)
 	}
