@@ -135,7 +135,7 @@ func parseSinaQuote(body string, codeMap map[string]string) map[string]*Quote {
 		if eq < 0 {
 			continue
 		}
-		symbol := line[12:eq] // after "var hq_str_"
+		symbol := line[11:eq] // after "var hq_str_"
 		payload := line[eq+2:]
 		if len(payload) == 0 || payload[len(payload)-1] != '"' {
 			continue
