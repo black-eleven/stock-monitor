@@ -12,6 +12,7 @@ import (
 	"github.com/black-eleven/stock-monitor/internal/db"
 	"github.com/black-eleven/stock-monitor/internal/eastmoney"
 	"github.com/black-eleven/stock-monitor/internal/handler"
+	"github.com/black-eleven/stock-monitor/internal/llm"
 	"github.com/black-eleven/stock-monitor/internal/middleware"
 	"github.com/black-eleven/stock-monitor/internal/model"
 	"github.com/black-eleven/stock-monitor/internal/recommend"
@@ -66,8 +67,8 @@ func main() {
 	klineH := handler.NewKlineHandler(emClient)
 
 	// Recommender
-	newsapiClient := recommend.NewNewsAPIClient(cfg.NewsAPIKey)
-	recommender := recommend.NewRecommender(newsapiClient, emClient, cfg.NewsAPIDays, cfg.NewsAPIPageSize, cfg.NewsAPILanguages, cfg.RecommendCandidates, cfg.RecommendLimit)
+	llmClient := llm.NewClient(cfg.DeepSeekAPIKey, cfg.DeepSeekModel)
+	recommender := recommend.NewRecommender(llmClient, emClient, cfg.LLMCacheTTL, cfg.RecommendLimit)
 	recommendH := handler.NewRecommendHandler(recommender)
 
 	signalRepo := repo.NewSignalRepo(database)
