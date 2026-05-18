@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -31,7 +32,6 @@ func (h *RecommendHandler) recommend(c *gin.Context) {
 		return
 	}
 
-	// Build exclusion list from user's watchlist
 	var exclude []string
 	userID := middleware.GetUserID(c)
 	if items, err := h.watchlistRepo.GetAll(userID); err == nil {
@@ -39,6 +39,7 @@ func (h *RecommendHandler) recommend(c *gin.Context) {
 			exclude = append(exclude, item.Symbol)
 		}
 	}
+	log.Printf("[RECOMMEND] user=%d exclude=%v", userID, exclude)
 
 	recs, err := h.recommender.Search(strings.TrimSpace(req.Industry), exclude)
 	if err != nil {
