@@ -20,6 +20,9 @@ func toSinaSymbol(qosSymbol string) (string, error) {
 	case "SZ":
 		return "sz" + code, nil
 	case "HK":
+		for len(code) < 5 {
+			code = "0" + code
+		}
 		return "hk" + code, nil
 	default:
 		return "", fmt.Errorf("unsupported market: %s", market)
