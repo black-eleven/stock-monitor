@@ -84,7 +84,7 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 			}
 		}
 
-		// Composite: LLM 30% + Quote 25% + Momentum 25% + Volume 20%
+		// Composite: LLM 25% + Quote 20% + Momentum 20% + Volume 15% + NewsHeat 20%
 		llmScore := 1.0 - float64(i)/float64(total)
 		quoteScore := 0.0
 		if hasQuote {
@@ -95,7 +95,8 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 		if maxVol > 0 && volume > 0 {
 			volumeScore = math.Min(1, volume/maxVol)
 		}
-		finalScore := math.Round((llmScore*0.3+quoteScore*0.25+momentumScore*0.25+volumeScore*0.2)*100) / 100
+		newsHeatScore := math.Max(0, math.Min(1, c.NewsHeat))
+		finalScore := math.Round((llmScore*0.25+quoteScore*0.2+momentumScore*0.2+volumeScore*0.15+newsHeatScore*0.2)*100) / 100
 
 		rec := model.Recommendation{
 			Symbol:        c.Symbol,
