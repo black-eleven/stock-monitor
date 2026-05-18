@@ -59,7 +59,7 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	}
 	quotes := r.batchFetchQuotes(symbols)
 
-	// Find max volume for normalization (volume heat proxy)
+	// Find max volume for normalization
 	maxVol := 0.0
 	for _, q := range quotes {
 		if q != nil && q.Volume > maxVol {
@@ -73,6 +73,7 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	for i, c := range candidates {
 		price := 0.0
 		changePercent := 0.0
+		amplitude := 0.0
 		volume := 0.0
 		hasQuote := false
 		if q, ok := quotes[c.Symbol]; ok && q != nil {
@@ -81,10 +82,11 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 			volume = q.Volume
 			if q.YP != 0 {
 				changePercent = ((q.Price - q.YP) / q.YP) * 100
+				amplitude = ((q.High - q.Low) / q.YP) * 100
 			}
 		}
 
-		// Composite: LLM 25% + Quote 20% + Momentum 20% + Volume 15% + NewsHeat 20%
+		// Composite: LLM 25% + Quote 20% + Momentum 20% + Volume 15% + Amplitude 20%
 		llmScore := 1.0 - float64(i)/float64(total)
 		quoteScore := 0.0
 		if hasQuote {
@@ -95,8 +97,8 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 		if maxVol > 0 && volume > 0 {
 			volumeScore = math.Min(1, volume/maxVol)
 		}
-		newsHeatScore := math.Max(0, math.Min(1, c.NewsHeat))
-		finalScore := math.Round((llmScore*0.25+quoteScore*0.2+momentumScore*0.2+volumeScore*0.15+newsHeatScore*0.2)*100) / 100
+		ampScore := math.Min(1, amplitude/10) // 10% amplitude → full score
+		finalScore := math.Round((llmScore*0.25+quoteScore*0.2+momentumScore*0.2+volumeScore*0.15+ampScore*0.2)*100) / 100
 
 		rec := model.Recommendation{
 			Symbol:        c.Symbol,

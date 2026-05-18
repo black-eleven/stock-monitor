@@ -10,10 +10,9 @@ import (
 )
 
 type Candidate struct {
-	Symbol   string  `json:"symbol"`
-	Name     string  `json:"name"`
-	Reason   string  `json:"reason"`
-	NewsHeat float64 `json:"newsHeat"`
+	Symbol string `json:"symbol"`
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
 }
 
 type Client struct {
