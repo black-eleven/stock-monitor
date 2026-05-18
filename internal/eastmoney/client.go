@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -64,6 +65,7 @@ func (c *Client) doGetWithUA(url string) (*http.Response, error) {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Referer", sinaReferer)
 	return c.httpClient.Do(req)
 }
 
@@ -217,6 +219,7 @@ func (c *Client) FetchHistoryKline(code string, kt int, count int) ([]json.RawMe
 		return data, nil
 	}
 	if strings.HasPrefix(code, "HK:") {
+		log.Printf("[KLINE] Sina failed for %s, falling back to Yahoo", code)
 		return c.fetchYahooKline(code, kt, count)
 	}
 	return data, err
@@ -286,12 +289,18 @@ func (c *Client) fetchYahooKline(code string, kt int, count int) ([]json.RawMess
 	interval, yrange := yahooParams(kt, count)
 	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=%s&interval=%s",
 		symbol, yrange, interval)
+	log.Printf("[YAHOO] %s", url)
 
 	resp, err := c.doGetWithUA(url)
 	if err != nil {
 		return nil, fmt.Errorf("yahoo kline: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("yahoo kline HTTP %d: %s", resp.StatusCode, string(body))
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -302,10 +311,18 @@ func (c *Client) fetchYahooKline(code string, kt int, count int) ([]json.RawMess
 
 func yahooParams(kt int, count int) (interval, yrange string) {
 	switch {
-	case kt <= 60:
+	case kt == 1:
 		return "1m", "5d"
-	case kt <= 240:
+	case kt == 5:
 		return "5m", "5d"
+	case kt == 15:
+		return "15m", "5d"
+	case kt == 30:
+		return "30m", "5d"
+	case kt == 60:
+		return "60m", "5d"
+	case kt == 120 || kt == 240:
+		return "1h", "10d"
 	case kt == 1001:
 		days := count * 2
 		if days < 5 {
