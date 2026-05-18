@@ -47,11 +47,11 @@ func ktToSinaScale(kt int) int {
 	case 240:
 		return 240
 	case 1001:
-		return 240 // daily
+		return 240  // daily
 	case 1007:
-		return 240 // weekly
+		return 1200 // weekly
 	case 1030:
-		return 240 // monthly
+		return 7200 // monthly
 	default:
 		return 240
 	}
