@@ -137,10 +137,10 @@ func parseSinaQuote(body string, codeMap map[string]string) map[string]*Quote {
 		}
 		symbol := line[11:eq] // after "var hq_str_"
 		payload := line[eq+2:]
-		if len(payload) == 0 || payload[len(payload)-1] != '"' {
+		if len(payload) < 2 || payload[len(payload)-2:] != "\";" {
 			continue
 		}
-		payload = payload[:len(payload)-1]
+		payload = payload[:len(payload)-2]
 
 		qosCode, ok := codeMap[symbol]
 		if !ok {
