@@ -5,18 +5,18 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/black-eleven/stock-monitor/internal/qos"
+	"github.com/black-eleven/stock-monitor/internal/eastmoney"
 	"github.com/gin-gonic/gin"
 )
 
 var symbolRegex = regexp.MustCompile(`^(HK|SH|SZ|US):[A-Z0-9]{1,10}$`)
 
 type QuoteHandler struct {
-	qos *qos.QosClient
+	client eastmoney.QuoteClient
 }
 
-func NewQuoteHandler(qos *qos.QosClient) *QuoteHandler {
-	return &QuoteHandler{qos: qos}
+func NewQuoteHandler(client eastmoney.QuoteClient) *QuoteHandler {
+	return &QuoteHandler{client: client}
 }
 
 func (h *QuoteHandler) Register(api *gin.RouterGroup) {
@@ -41,13 +41,13 @@ func (h *QuoteHandler) batch(c *gin.Context) {
 
 	type result struct {
 		symbol string
-		quote  *qos.Quote
+		quote  *eastmoney.Quote
 	}
 	results := make(chan result, len(trimmed))
 
 	for _, s := range trimmed {
 		go func(symbol string) {
-			q, err := h.qos.FetchQuoteCached(symbol)
+			q, err := h.client.FetchQuoteCached(symbol)
 			if err != nil {
 				results <- result{symbol: symbol}
 			} else {
@@ -72,7 +72,7 @@ func (h *QuoteHandler) single(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid symbol format. Use HK:700 / SH:600519 / SZ:000001 / US:AAPL"})
 		return
 	}
-	quote, err := h.qos.FetchQuoteCached(symbol)
+	quote, err := h.client.FetchQuoteCached(symbol)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch quote"})
 		return
