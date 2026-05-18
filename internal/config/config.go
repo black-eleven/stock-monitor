@@ -58,7 +58,7 @@ func Load() *Config {
 			llmCacheTTL = n
 		}
 	}
-	recommendLimit := 15
+	recommendLimit := 8
 	if s := os.Getenv("RECOMMEND_LIMIT"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n >= 5 && n <= 50 {
 			recommendLimit = n
