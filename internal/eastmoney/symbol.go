@@ -5,27 +5,6 @@ import (
 	"strings"
 )
 
-// toSecID converts market:code symbol (SH:600519, SZ:000001, HK:00700) to EastMoney secid.
-func toSecID(qosSymbol string) (string, error) {
-	parts := strings.SplitN(qosSymbol, ":", 2)
-	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid symbol format: %s", qosSymbol)
-	}
-	market := strings.ToUpper(parts[0])
-	code := strings.ToUpper(parts[1])
-
-	switch market {
-	case "SH":
-		return "1." + code, nil
-	case "SZ":
-		return "0." + code, nil
-	case "HK":
-		return "116." + code, nil
-	default:
-		return "", fmt.Errorf("unsupported market: %s", market)
-	}
-}
-
 // toSinaSymbol converts market:code symbol to Sina Finance format (sh600519, sz000001, hk00700).
 func toSinaSymbol(qosSymbol string) (string, error) {
 	parts := strings.SplitN(qosSymbol, ":", 2)
@@ -51,48 +30,27 @@ func toSinaSymbol(qosSymbol string) (string, error) {
 func ktToSinaScale(kt int) int {
 	switch kt {
 	case 1:
-		return 1   // 1m
+		return 1
 	case 5:
-		return 5   // 5m
+		return 5
 	case 15:
-		return 15  // 15m
+		return 15
 	case 30:
-		return 30  // 30m
+		return 30
 	case 60:
-		return 60  // 1h
+		return 60
 	case 120:
-		return 120 // 2h
+		return 120
 	case 240:
-		return 240 // 4h
+		return 240
 	case 1001:
 		return 240 // daily
 	case 1007:
-		return 240 // weekly — Sina uses the same scale, we'll adjust count
+		return 240 // weekly
 	case 1030:
-		return 240 // monthly — same as above
+		return 240 // monthly
 	default:
 		return 240
-	}
-}
-
-// toTencentSymbol converts market:code symbol to Tencent format (hk00700, sh600519, sz000001).
-func toTencentSymbol(qosSymbol string) (string, error) {
-	parts := strings.SplitN(qosSymbol, ":", 2)
-	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid symbol format: %s", qosSymbol)
-	}
-	market := strings.ToUpper(parts[0])
-	code := strings.ToUpper(parts[1])
-
-	switch market {
-	case "SH":
-		return "sh" + code, nil
-	case "SZ":
-		return "sz" + code, nil
-	case "HK":
-		return "hk" + code, nil
-	default:
-		return "", fmt.Errorf("unsupported market: %s", market)
 	}
 }
 
