@@ -45,7 +45,7 @@ func NewClient() *Client {
 	return &Client{
 		httpClient:   &http.Client{Timeout: 10 * time.Second},
 		baseURL:      "http://push2.eastmoney.com/api/qt/stock/get",
-		klineBaseURL: "http://push2his.eastmoney.com/api/qt/stock/kline/get",
+		klineBaseURL: "https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData",
 	}
 }
 
@@ -55,6 +55,15 @@ func (c *Client) doGet(url string) (*http.Response, error) {
 		return nil, err
 	}
 	req.Header.Set("Referer", eastMoneyReferer)
+	return c.httpClient.Do(req)
+}
+
+func (c *Client) doGetWithUA(url string) (*http.Response, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 	return c.httpClient.Do(req)
 }
 
@@ -72,14 +81,52 @@ func (c *Client) GetTrackedCodes() []string {
 	return append([]string{}, c.tracked...)
 }
 
-// BatchFetchQuotes fetches quotes for multiple codes at once using EastMoney API.
+// BatchFetchQuotes fetches quotes using EastMoney (SH/SZ) + Tencent (HK) as fallback.
 func (c *Client) BatchFetchQuotes(codes []string) (map[string]*Quote, error) {
 	if len(codes) == 0 {
 		return map[string]*Quote{}, nil
 	}
 
+	emCodes := make([]string, 0, len(codes))
+	hkCodes := make([]string, 0, len(codes))
+	for _, code := range codes {
+		if isHKCode(code) {
+			hkCodes = append(hkCodes, code)
+		} else {
+			emCodes = append(emCodes, code)
+		}
+	}
+
+	result := make(map[string]*Quote, len(codes))
+
+	// SH/SZ via EastMoney
+	if len(emCodes) > 0 {
+		emQuotes, _ := c.batchFetchEastMoney(emCodes)
+		for k, v := range emQuotes {
+			result[k] = v
+		}
+	}
+
+	// HK via Tencent
+	if len(hkCodes) > 0 {
+		hkQuotes, _ := c.batchFetchTencent(hkCodes)
+		for k, v := range hkQuotes {
+			result[k] = v
+		}
+	}
+
+	return result, nil
+}
+
+func isHKCode(code string) bool {
+	return strings.HasPrefix(code, "HK:")
+}
+
+// ---- EastMoney quote ----
+
+func (c *Client) batchFetchEastMoney(codes []string) (map[string]*Quote, error) {
 	secIDs := make([]string, 0, len(codes))
-	codeMap := make(map[string]string, len(codes)) // secid to qosCode
+	codeMap := make(map[string]string, len(codes))
 	for _, code := range codes {
 		secID, err := toSecID(code)
 		if err != nil {
@@ -110,9 +157,7 @@ func (c *Client) BatchFetchQuotes(codes []string) (map[string]*Quote, error) {
 	return c.parseQuoteResponse(body, codeMap)
 }
 
-// parseQuoteResponse handles both batch format (data.diff[]) and single-item format.
 func (c *Client) parseQuoteResponse(body []byte, codeMap map[string]string) (map[string]*Quote, error) {
-	// Try batch format: data.diff[]
 	var batchResp struct {
 		RC   int `json:"rc"`
 		Data struct {
@@ -124,7 +169,6 @@ func (c *Client) parseQuoteResponse(body []byte, codeMap map[string]string) (map
 		return c.parseDiffItems(batchResp.Data.Diff, codeMap), nil
 	}
 
-	// Try single-item format: data is a flat object with f57 code
 	var singleResp struct {
 		RC   int `json:"rc"`
 		Data struct {
@@ -142,20 +186,14 @@ func (c *Client) parseQuoteResponse(body []byte, codeMap map[string]string) (map
 		return map[string]*Quote{}, nil
 	}
 
-	// Match code (f57) against known secid suffixes in codeMap
 	for secID, qosCode := range codeMap {
 		if strings.HasSuffix(secID, "."+singleResp.Data.F57) {
 			return map[string]*Quote{qosCode: {
-				Code:      qosCode,
-				Price:     singleResp.Data.F43 / 100,
-				YP:        singleResp.Data.F60 / 100,
-				Open:      singleResp.Data.F46 / 100,
-				High:      singleResp.Data.F44 / 100,
-				Low:       singleResp.Data.F45 / 100,
-				Volume:    singleResp.Data.F47,
-				Turnover:  singleResp.Data.F48,
-				Timestamp: time.Now().Unix(),
-				Status:    "OK",
+				Code: qosCode, Price: singleResp.Data.F43 / 100,
+				YP: singleResp.Data.F60 / 100, Open: singleResp.Data.F46 / 100,
+				High: singleResp.Data.F44 / 100, Low: singleResp.Data.F45 / 100,
+				Volume: singleResp.Data.F47, Turnover: singleResp.Data.F48,
+				Timestamp: time.Now().Unix(), Status: "OK",
 			}}, nil
 		}
 	}
@@ -193,22 +231,103 @@ func (c *Client) parseDiffItems(items []json.RawMessage, codeMap map[string]stri
 		}
 
 		quotes[qosCode] = &Quote{
-			Code:      qosCode,
-			Price:     d.F43 / 100,
-			YP:        d.F60 / 100,
-			Open:      d.F46 / 100,
-			High:      d.F44 / 100,
-			Low:       d.F45 / 100,
-			Volume:    d.F47,
-			Turnover:  d.F48,
-			Timestamp: ts,
-			Status:    "OK",
+			Code: qosCode, Price: d.F43 / 100, YP: d.F60 / 100,
+			Open: d.F46 / 100, High: d.F44 / 100, Low: d.F45 / 100,
+			Volume: d.F47, Turnover: d.F48, Timestamp: ts, Status: "OK",
 		}
 	}
 	return quotes
 }
 
-// FetchQuote fetches a single quote via EastMoney API.
+// ---- Tencent quote (HK fallback) ----
+
+func (c *Client) batchFetchTencent(codes []string) (map[string]*Quote, error) {
+	txSymbols := make([]string, 0, len(codes))
+	for _, code := range codes {
+		sym, err := toTencentSymbol(code)
+		if err != nil {
+			continue
+		}
+		txSymbols = append(txSymbols, sym)
+	}
+	if len(txSymbols) == 0 {
+		return map[string]*Quote{}, nil
+	}
+
+	url := fmt.Sprintf("http://qt.gtimg.cn/q=%s", strings.Join(txSymbols, ","))
+	resp, err := c.doGet(url)
+	if err != nil {
+		return nil, fmt.Errorf("tencent quote: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("tencent quote read: %w", err)
+	}
+
+	return parseTencentQuote(string(body), codes)
+}
+
+func parseTencentQuote(body string, codes []string) (map[string]*Quote, error) {
+	// Response: v_hk00700="100~Tencent~00700~451.400~456.400~..."
+	result := make(map[string]*Quote, len(codes))
+	ts := time.Now().Unix()
+
+	codeIndex := make(map[string]string, len(codes))
+	for _, code := range codes {
+		parts := strings.SplitN(code, ":", 2)
+		if len(parts) == 2 {
+			codeIndex[strings.ToLower(parts[1])] = code
+		}
+	}
+
+	lines := strings.Split(body, ";")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.Contains(line, "=\"") {
+			continue
+		}
+		// Extract v_hkXXXX="..." or v_szXXXX="..."
+		idx := strings.Index(line, "=\"")
+		if idx < 0 {
+			continue
+		}
+		payload := line[idx+2:]
+		if len(payload) == 0 || payload[len(payload)-1] != '"' {
+			continue
+		}
+		payload = payload[:len(payload)-1]
+
+		fields := strings.Split(payload, "~")
+		if len(fields) < 35 {
+			continue
+		}
+		// idx 2: code, idx 3: price, idx 4: yp, idx 5: open, idx 33: high, idx 34: low, idx 6: volume, idx 37: turnover
+		txCode := strings.TrimSpace(fields[2])
+		qosCode, ok := codeIndex[strings.ToLower(txCode)]
+		if !ok {
+			continue
+		}
+
+		result[qosCode] = &Quote{
+			Code:      qosCode,
+			Price:     parseFloatStr(fields[3]),
+			YP:        parseFloatStr(fields[4]),
+			Open:      parseFloatStr(fields[5]),
+			High:      parseFloatStr(fields[33]),
+			Low:       parseFloatStr(fields[34]),
+			Volume:    parseFloatStr(fields[6]),
+			Turnover:  parseFloatStr(fields[37]),
+			Timestamp: ts,
+			Status:    "OK",
+		}
+	}
+	return result, nil
+}
+
+// ---- FetchQuote (single) ----
+
 func (c *Client) FetchQuote(code string) (*Quote, error) {
 	quotes, err := c.BatchFetchQuotes([]string{code})
 	if err != nil {
@@ -220,94 +339,192 @@ func (c *Client) FetchQuote(code string) (*Quote, error) {
 	return nil, fmt.Errorf("no quote data for %s", code)
 }
 
-// FetchHistoryKline fetches K-line data from EastMoney API.
+// ---- K-line: Sina (SH/SZ) + Yahoo (HK fallback) ----
+
 func (c *Client) FetchHistoryKline(code string, kt int, count int) ([]json.RawMessage, error) {
-	secID, err := toSecID(code)
+	// Try Sina first
+	data, err := c.fetchSinaKline(code, kt, count)
+	if err == nil && len(data) > 0 {
+		return data, nil
+	}
+
+	// Fall back to Yahoo for HK stocks
+	if isHKCode(code) {
+		return c.fetchYahooKline(code, kt, count)
+	}
+
+	return data, err
+}
+
+func (c *Client) fetchSinaKline(code string, kt int, count int) ([]json.RawMessage, error) {
+	symbol, err := toSinaSymbol(code)
 	if err != nil {
 		return nil, err
 	}
 
-	klt := ktToKlt(kt)
-	end := time.Now().Format("20060102")
-	beg := estimateStartDate(kt, count)
-
-	url := fmt.Sprintf("%s?secid=%s&klt=%d&fqt=1&beg=%s&end=%s&lmt=%d",
-		c.klineBaseURL, secID, klt, beg, end, count)
+	scale := ktToSinaScale(kt)
+	url := fmt.Sprintf("%s?symbol=%s&scale=%d&datalen=%d", c.klineBaseURL, symbol, scale, count)
 
 	resp, err := c.doGet(url)
 	if err != nil {
-		return nil, fmt.Errorf("eastmoney kline: %w", err)
+		return nil, fmt.Errorf("sina kline: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("eastmoney kline read: %w", err)
+		return nil, fmt.Errorf("sina kline read: %w", err)
 	}
 
-	return c.parseKlineResponse(body)
+	return parseSinaKline(body)
 }
 
-func estimateStartDate(kt int, count int) string {
-	now := time.Now()
-	var days int
-	switch {
-	case kt <= 240:
-		days = (count*kt + 1440 - 1) / 1440 // minutes to days, ceiling
-	case kt == 1001:
-		days = count * 2 // 2x margin for weekends
-	case kt == 1007:
-		days = count * 10
-	case kt == 1030:
-		days = count * 45
-	default:
-		days = count * 2
+func parseSinaKline(body []byte) ([]json.RawMessage, error) {
+	if string(body) == "null" || len(body) == 0 {
+		return nil, fmt.Errorf("sina: no data")
 	}
-	return now.AddDate(0, 0, -days).Format("20060102")
-}
-
-func (c *Client) parseKlineResponse(body []byte) ([]json.RawMessage, error) {
-	var resp struct {
-		RC   int `json:"rc"`
-		Data struct {
-			Code   string   `json:"code"`
-			Klines []string `json:"klines"`
-		} `json:"data"`
+	var records []struct {
+		Day    string `json:"day"`
+		Open   string `json:"open"`
+		High   string `json:"high"`
+		Low    string `json:"low"`
+		Close  string `json:"close"`
+		Volume string `json:"volume"`
 	}
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("kline parse: %w", err)
+	if err := json.Unmarshal(body, &records); err != nil {
+		return nil, fmt.Errorf("sina kline parse: %w", err)
 	}
-	if resp.RC != 0 || resp.Data.Klines == nil {
-		return []json.RawMessage{}, nil
+	if len(records) == 0 {
+		return nil, fmt.Errorf("sina: empty records")
 	}
 
-	bars := make([]json.RawMessage, 0, len(resp.Data.Klines))
-	for _, line := range resp.Data.Klines {
-		parts := strings.Split(line, ",")
-		if len(parts) < 7 {
-			continue
-		}
-		// Format: date,open,close,high,low,volume,amount,...
-		ts := parseDateToUnix(parts[0])
-		o := parseFloatStr(parts[1])
-		cl := parseFloatStr(parts[2])
-		h := parseFloatStr(parts[3])
-		l := parseFloatStr(parts[4])
-		v := parseFloatStr(parts[5])
-
+	bars := make([]json.RawMessage, 0, len(records))
+	for _, r := range records {
+		ts := parseDateToUnix(r.Day)
 		bar := map[string]interface{}{
 			"ts": ts,
-			"o":  o,
-			"cl": cl,
-			"h":  h,
-			"l":  l,
-			"v":  v,
+			"o":  parseFloatStr(r.Open),
+			"cl": parseFloatStr(r.Close),
+			"h":  parseFloatStr(r.High),
+			"l":  parseFloatStr(r.Low),
+			"v":  parseFloatStr(r.Volume),
 		}
 		data, _ := json.Marshal(bar)
 		bars = append(bars, json.RawMessage(data))
 	}
 	return bars, nil
 }
+
+// ---- Yahoo Finance kline (HK fallback) ----
+
+func (c *Client) fetchYahooKline(code string, kt int, count int) ([]json.RawMessage, error) {
+	symbol, err := toYahooSymbol(code)
+	if err != nil {
+		return nil, err
+	}
+
+	interval, yrange := yahooParams(kt, count)
+	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=%s&interval=%s",
+		symbol, yrange, interval)
+
+	resp, err := c.doGetWithUA(url)
+	if err != nil {
+		return nil, fmt.Errorf("yahoo kline: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("yahoo kline read: %w", err)
+	}
+
+	return parseYahooKline(body)
+}
+
+func yahooParams(kt int, count int) (interval, yrange string) {
+	switch {
+	case kt <= 60:
+		return "1m", "5d"
+	case kt <= 240:
+		return "5m", "5d"
+	case kt == 1001:
+		days := count * 2
+		if days < 5 {
+			days = 5
+		}
+		if days <= 30 {
+			return "1d", "1mo"
+		}
+		if days <= 90 {
+			return "1d", "3mo"
+		}
+		if days <= 180 {
+			return "1d", "6mo"
+		}
+		if days <= 365 {
+			return "1d", "1y"
+		}
+		return "1d", "2y"
+	case kt == 1007:
+		return "1wk", "6mo"
+	case kt == 1030:
+		return "1mo", "2y"
+	default:
+		return "1d", "1mo"
+	}
+}
+
+func parseYahooKline(body []byte) ([]json.RawMessage, error) {
+	var resp struct {
+		Chart struct {
+			Result []struct {
+				Timestamp  []int64 `json:"timestamp"`
+				Indicators struct {
+					Quote []struct {
+						Open   []float64 `json:"open"`
+						High   []float64 `json:"high"`
+						Low    []float64 `json:"low"`
+						Close  []float64 `json:"close"`
+						Volume []float64 `json:"volume"`
+					} `json:"quote"`
+				} `json:"indicators"`
+			} `json:"result"`
+		} `json:"chart"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("yahoo kline parse: %w", err)
+	}
+	if len(resp.Chart.Result) == 0 || len(resp.Chart.Result[0].Indicators.Quote) == 0 {
+		return nil, fmt.Errorf("yahoo: no data")
+	}
+
+	q := resp.Chart.Result[0]
+	timestamps := q.Timestamp
+	quote := q.Indicators.Quote[0]
+	if len(timestamps) == 0 || len(quote.Open) == 0 {
+		return nil, fmt.Errorf("yahoo: empty series")
+	}
+
+	bars := make([]json.RawMessage, 0, len(timestamps))
+	for i, ts := range timestamps {
+		if i >= len(quote.Open) {
+			break
+		}
+		bar := map[string]interface{}{
+			"ts": ts,
+			"o":  quote.Open[i],
+			"cl": quote.Close[i],
+			"h":  quote.High[i],
+			"l":  quote.Low[i],
+			"v":  quote.Volume[i],
+		}
+		data, _ := json.Marshal(bar)
+		bars = append(bars, json.RawMessage(data))
+	}
+	return bars, nil
+}
+
+// ---- Date/float helpers ----
 
 func parseDateToUnix(dateStr string) int64 {
 	t, err := time.Parse("2006-01-02", dateStr)

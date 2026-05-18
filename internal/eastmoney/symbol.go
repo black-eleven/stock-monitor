@@ -26,26 +26,29 @@ func toSecID(qosSymbol string) (string, error) {
 	}
 }
 
-// fromSecID converts EastMoney secid back to market:code symbol.
-func fromSecID(secID string) string {
-	parts := strings.SplitN(secID, ".", 2)
+// toSinaSymbol converts market:code symbol to Sina Finance format (sh600519, sz000001, hk00700).
+func toSinaSymbol(qosSymbol string) (string, error) {
+	parts := strings.SplitN(qosSymbol, ":", 2)
 	if len(parts) != 2 {
-		return secID
+		return "", fmt.Errorf("invalid symbol format: %s", qosSymbol)
 	}
-	switch parts[0] {
-	case "1":
-		return "SH:" + parts[1]
-	case "0":
-		return "SZ:" + parts[1]
-	case "116":
-		return "HK:" + parts[1]
+	market := strings.ToUpper(parts[0])
+	code := strings.ToUpper(parts[1])
+
+	switch market {
+	case "SH":
+		return "sh" + code, nil
+	case "SZ":
+		return "sz" + code, nil
+	case "HK":
+		return "hk" + code, nil
 	default:
-		return secID
+		return "", fmt.Errorf("unsupported market: %s", market)
 	}
 }
 
-// ktToKlt converts K-line type to EastMoney klt parameter.
-func ktToKlt(kt int) int {
+// ktToSinaScale converts K-line type to Sina Finance scale parameter.
+func ktToSinaScale(kt int) int {
 	switch kt {
 	case 1:
 		return 1   // 1m
@@ -62,12 +65,54 @@ func ktToKlt(kt int) int {
 	case 240:
 		return 240 // 4h
 	case 1001:
-		return 101 // daily
+		return 240 // daily
 	case 1007:
-		return 102 // weekly
+		return 240 // weekly — Sina uses the same scale, we'll adjust count
 	case 1030:
-		return 103 // monthly
+		return 240 // monthly — same as above
 	default:
-		return 101 // default to daily
+		return 240
+	}
+}
+
+// toTencentSymbol converts market:code symbol to Tencent format (hk00700, sh600519, sz000001).
+func toTencentSymbol(qosSymbol string) (string, error) {
+	parts := strings.SplitN(qosSymbol, ":", 2)
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid symbol format: %s", qosSymbol)
+	}
+	market := strings.ToUpper(parts[0])
+	code := strings.ToUpper(parts[1])
+
+	switch market {
+	case "SH":
+		return "sh" + code, nil
+	case "SZ":
+		return "sz" + code, nil
+	case "HK":
+		return "hk" + code, nil
+	default:
+		return "", fmt.Errorf("unsupported market: %s", market)
+	}
+}
+
+// toYahooSymbol converts market:code symbol to Yahoo Finance format (0700.HK, 600519.SS, 000001.SZ).
+func toYahooSymbol(qosSymbol string) (string, error) {
+	parts := strings.SplitN(qosSymbol, ":", 2)
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid symbol format: %s", qosSymbol)
+	}
+	market := strings.ToUpper(parts[0])
+	code := strings.ToUpper(parts[1])
+
+	switch market {
+	case "SH":
+		return code + ".SS", nil
+	case "SZ":
+		return code + ".SZ", nil
+	case "HK":
+		return code + ".HK", nil
+	default:
+		return "", fmt.Errorf("unsupported market: %s", market)
 	}
 }
