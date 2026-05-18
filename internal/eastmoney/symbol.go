@@ -69,6 +69,10 @@ func toYahooSymbol(qosSymbol string) (string, error) {
 	case "SZ":
 		return code + ".SZ", nil
 	case "HK":
+		// Yahoo requires 4-digit HK codes: 0700.HK not 700.HK
+		for len(code) < 4 {
+			code = "0" + code
+		}
 		return code + ".HK", nil
 	default:
 		return "", fmt.Errorf("unsupported market: %s", market)
