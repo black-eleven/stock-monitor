@@ -8,11 +8,19 @@ class KlineComponent {
   }
 
   init() {
+    const BJ = 8 * 3600; // UTC+8 offset in seconds
+    const fmtBeijing = (time) => {
+      const d = new Date((time + BJ) * 1000);
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+    };
+
     this.chart = LightweightCharts.createChart(document.getElementById('klineChartContainer'), {
       layout: { background: { color: '#161b22' }, textColor: '#8b949e' },
       grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#30363d' },
+      localization: { timeFormatter: fmtBeijing },
       rightPriceScale: { borderColor: '#30363d' },
     });
 
