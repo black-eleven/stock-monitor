@@ -42,7 +42,7 @@ func (r *Recommender) Search(industry string, exclude []string) ([]model.Recomme
 	if e, ok := r.cache[industry]; ok && time.Now().Before(e.expiresAt) {
 		recs := e.recs
 		r.mu.RUnlock()
-		return recs, nil
+		return filterCached(recs, exclude), nil
 	}
 	r.mu.RUnlock()
 
@@ -149,6 +149,24 @@ func (r *Recommender) Search(industry string, exclude []string) ([]model.Recomme
 	r.mu.Unlock()
 
 	return recs, nil
+}
+
+// filterCached removes excluded symbols from cached results.
+func filterCached(recs []model.Recommendation, exclude []string) []model.Recommendation {
+	if len(exclude) == 0 {
+		return recs
+	}
+	excluded := make(map[string]bool, len(exclude))
+	for _, s := range exclude {
+		excluded[normalizeCode(s)] = true
+	}
+	filtered := make([]model.Recommendation, 0, len(recs))
+	for _, r := range recs {
+		if !excluded[normalizeCode(r.Symbol)] {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
 }
 
 // normalizeCode strips leading zeros from HK codes for comparison.
