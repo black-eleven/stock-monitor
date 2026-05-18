@@ -1,9 +1,8 @@
-package qos
+package eastmoney
 
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 )
@@ -37,13 +36,6 @@ func (m *mergeEntry) resolve(r mergeResult) {
 	})
 }
 
-func cacheTTL(kt int) time.Duration {
-	if kt <= 240 {
-		return 30 * time.Second
-	}
-	return 5 * time.Minute
-}
-
 var (
 	klineCache   = map[string]*klineCacheEntry{}
 	klineCacheMu sync.RWMutex
@@ -62,32 +54,14 @@ func klineCacheKey(code string, kt, count int) string {
 	return fmt.Sprintf("%s:%d:%d", code, kt, count)
 }
 
-func isRetryable(err error) bool {
-	s := err.Error()
-	return s == "not connected" || s == "connection lost" ||
-		strings.Contains(s, "request timeout")
-}
-
-// fetchKlineWithRetry retries FetchHistoryKline up to 3 times on transient errors.
-func (c *QosClient) fetchKlineWithRetry(code string, kt, count int) ([]json.RawMessage, error) {
-	var lastErr error
-	delay := 1 * time.Second
-	for i := 0; i < 3; i++ {
-		data, err := c.FetchHistoryKline(code, kt, count)
-		if err == nil {
-			return data, nil
-		}
-		lastErr = err
-		if !isRetryable(err) {
-			break
-		}
-		time.Sleep(delay)
-		delay *= 2
+func cacheTTL(kt int) time.Duration {
+	if kt <= 240 {
+		return 30 * time.Second
 	}
-	return nil, lastErr
+	return 5 * time.Minute
 }
 
-func (c *QosClient) FetchHistoryKlineCached(code string, kt int, count int) ([]json.RawMessage, error) {
+func (c *Client) FetchHistoryKlineCached(code string, kt int, count int) ([]json.RawMessage, error) {
 	key := klineCacheKey(code, kt, count)
 
 	klineCacheMu.RLock()
@@ -107,7 +81,7 @@ func (c *QosClient) FetchHistoryKlineCached(code string, kt int, count int) ([]j
 	klineMergeMu.Unlock()
 
 	if !exists {
-		data, err := c.fetchKlineWithRetry(code, kt, count)
+		data, err := c.FetchHistoryKline(code, kt, count)
 		if err == nil {
 			klineCacheMu.Lock()
 			klineCache[key] = &klineCacheEntry{data: data, expiresAt: time.Now().Add(cacheTTL(kt))}
@@ -124,26 +98,7 @@ func (c *QosClient) FetchHistoryKlineCached(code string, kt int, count int) ([]j
 	return m.result.data, m.result.err
 }
 
-// fetchQuoteWithRetry retries FetchQuote up to 3 times on transient errors.
-func (c *QosClient) fetchQuoteWithRetry(code string) (*Quote, error) {
-	var lastErr error
-	delay := 1 * time.Second
-	for i := 0; i < 3; i++ {
-		q, err := c.FetchQuote(code)
-		if err == nil {
-			return q, nil
-		}
-		lastErr = err
-		if !isRetryable(err) {
-			break
-		}
-		time.Sleep(delay)
-		delay *= 2
-	}
-	return nil, lastErr
-}
-
-func (c *QosClient) FetchQuoteCached(code string) (*Quote, error) {
+func (c *Client) FetchQuoteCached(code string) (*Quote, error) {
 	key := code
 
 	quoteCacheMu.RLock()
@@ -163,7 +118,7 @@ func (c *QosClient) FetchQuoteCached(code string) (*Quote, error) {
 	quoteMergeMu.Unlock()
 
 	if !exists {
-		q, err := c.fetchQuoteWithRetry(code)
+		q, err := c.FetchQuote(code)
 		if err == nil && q != nil {
 			quoteCacheMu.Lock()
 			quoteCache[key] = &quoteCacheEntry{data: q, expiresAt: time.Now().Add(30 * time.Second)}

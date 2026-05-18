@@ -5,14 +5,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/black-eleven/stock-monitor/internal/alert"
 	"github.com/black-eleven/stock-monitor/internal/config"
 	"github.com/black-eleven/stock-monitor/internal/db"
+	"github.com/black-eleven/stock-monitor/internal/eastmoney"
 	"github.com/black-eleven/stock-monitor/internal/handler"
+	"github.com/black-eleven/stock-monitor/internal/llm"
 	"github.com/black-eleven/stock-monitor/internal/middleware"
 	"github.com/black-eleven/stock-monitor/internal/model"
-	"github.com/black-eleven/stock-monitor/internal/qos"
 	"github.com/black-eleven/stock-monitor/internal/recommend"
 	"github.com/black-eleven/stock-monitor/internal/repo"
 	"github.com/black-eleven/stock-monitor/internal/ws"
@@ -51,30 +53,23 @@ func main() {
 		log.Printf("[MAIN] Initial admin created (id=%d), password printed in config logs above", adminID)
 	}
 
-	// QOS Client
-	qosClient := qos.NewClient(cfg.QosWsUrl)
+	// EastMoney Client
+	emClient := eastmoney.NewClient()
 
 	// Alert Engine
 	alertEngine := alert.NewEngine(alertRepo, hub)
-
-	// Wire QOS callbacks
-	qosClient.OnQuote = func(q qos.Quote) {
-		mq := model.FromQosQuote(q)
-		hub.BroadcastQuote(mq)
-		alertEngine.Evaluate(mq)
-	}
 
 	// HTTP handlers
 	watchlistH := handler.NewWatchlistHandler(watchlistRepo, nil)
 	alertH := handler.NewAlertHandler(alertRepo)
 	holdingH := handler.NewHoldingHandler(holdingRepo)
-	quoteH := handler.NewQuoteHandler(qosClient)
-	klineH := handler.NewKlineHandler(qosClient)
+	quoteH := handler.NewQuoteHandler(emClient)
+	klineH := handler.NewKlineHandler(emClient)
 
 	// Recommender
-	newsapiClient := recommend.NewNewsAPIClient(cfg.NewsAPIKey)
-	recommender := recommend.NewRecommender(newsapiClient, qosClient, cfg.NewsAPIDays, cfg.NewsAPIPageSize, cfg.NewsAPILanguages, cfg.RecommendCandidates, cfg.RecommendLimit)
-	recommendH := handler.NewRecommendHandler(recommender)
+	llmClient := llm.NewClient(cfg.DeepSeekAPIKey, cfg.DeepSeekModel)
+	recommender := recommend.NewRecommender(llmClient, emClient, cfg.LLMCacheTTL, cfg.RecommendLimit)
+	recommendH := handler.NewRecommendHandler(recommender, watchlistRepo)
 
 	signalRepo := repo.NewSignalRepo(database)
 	signalH := handler.NewSignalHandler(signalRepo, hub)
@@ -121,13 +116,49 @@ func main() {
 		}
 	}()
 
-	// Connect QOS after server is ready
-	go qosClient.Connect()
+	// Polling goroutine — fetch quotes every 5s for tracked stocks
+	go pollQuotes(emClient, watchlistRepo, hub, alertEngine)
+
+	// Periodic watchlist sync — refresh tracked codes every 30s
+	go syncTrackedCodes(emClient, watchlistRepo)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down...")
-	qosClient.Close()
+}
+
+func pollQuotes(emClient *eastmoney.Client, watchlistRepo *repo.WatchlistRepo, hub *ws.Hub, alertEngine *alert.Engine) {
+	time.Sleep(2 * time.Second) // Wait for server to start
+	for {
+		codes := emClient.GetTrackedCodes()
+		if len(codes) > 0 {
+			quotes, err := emClient.BatchFetchQuotes(codes)
+			if err != nil {
+				log.Printf("[POLL] Batch fetch error: %v", err)
+			} else {
+				for _, q := range quotes {
+					mq := model.FromEMQuote(*q)
+					hub.BroadcastQuote(mq)
+					alertEngine.Evaluate(mq)
+				}
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func syncTrackedCodes(emClient *eastmoney.Client, watchlistRepo *repo.WatchlistRepo) {
+	for {
+		time.Sleep(30 * time.Second)
+		symbols, err := watchlistRepo.GetAllSymbols()
+		if err != nil {
+			log.Printf("[SYNC] Failed to load watchlist symbols: %v", err)
+			continue
+		}
+		if len(symbols) > 0 {
+			emClient.SetTrackedCodes(symbols)
+		}
+	}
 }

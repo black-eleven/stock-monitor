@@ -7,34 +7,24 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 )
 
 type Config struct {
-	Port           string
-	QosKey         string
-	DataDir        string
-	QosWsUrl       string
-	JwtSecret             string
-	AdminPassword          string
-	ExplicitAdminPassword  bool
-	NewsAPIKey          string
-	NewsAPIDays         int
-	NewsAPIPageSize     int
-	NewsAPILanguages    []string
-	RecommendCandidates int
-	RecommendLimit      int
+	Port                 string
+	DataDir              string
+	JwtSecret            string
+	AdminPassword        string
+	ExplicitAdminPassword bool
+	DeepSeekAPIKey       string
+	DeepSeekModel        string
+	LLMCacheTTL          int
+	RecommendLimit       int
 }
 
 func Load() *Config {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
-	}
-	qosKey := os.Getenv("QOS_KEY")
-	qosWsUrl := "wss://api.qos.hk/ws"
-	if qosKey != "" {
-		qosWsUrl += "?key=" + qosKey
 	}
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
@@ -54,34 +44,21 @@ func Load() *Config {
 		log.Printf("[CONFIG] ADMIN_PASSWORD not set, generated: %s", adminPassword)
 	}
 
-	newsAPIKey := os.Getenv("NEWSAPI_KEY")
-	if newsAPIKey == "" {
-		log.Printf("[CONFIG] NEWSAPI_KEY not set — recommendation feature will be unavailable")
+	deepSeekAPIKey := os.Getenv("DEEPSEEK_API_KEY")
+	if deepSeekAPIKey == "" {
+		log.Printf("[CONFIG] DEEPSEEK_API_KEY not set — LLM recommendation will be unavailable")
 	}
-	newsAPILanguages := []string{"en", "zh"}
-	if s := os.Getenv("NEWSAPI_LANGUAGES"); s != "" {
-		newsAPILanguages = strings.Split(s, ",")
+	deepSeekModel := os.Getenv("DEEPSEEK_MODEL")
+	if deepSeekModel == "" {
+		deepSeekModel = "deepseek-chat"
 	}
-	newsAPIDays := 7
-	if s := os.Getenv("NEWSAPI_DAYS"); s != "" {
-		if d, err := strconv.Atoi(s); err == nil && d > 0 {
-			newsAPIDays = d
+	llmCacheTTL := 30
+	if s := os.Getenv("LLM_CACHE_TTL"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			llmCacheTTL = n
 		}
 	}
-	newsAPIPageSize := 50
-	if s := os.Getenv("NEWSAPI_PAGE_SIZE"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n > 0 && n <= 100 {
-			newsAPIPageSize = n
-		}
-	}
-
-	recommendCandidates := 20
-	if s := os.Getenv("RECOMMEND_CANDIDATES"); s != "" {
-		if n, err := strconv.Atoi(s); err == nil && n >= 5 && n <= 50 {
-			recommendCandidates = n
-		}
-	}
-	recommendLimit := 15
+	recommendLimit := 8
 	if s := os.Getenv("RECOMMEND_LIMIT"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n >= 5 && n <= 50 {
 			recommendLimit = n
@@ -89,19 +66,15 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Port:          port,
-		QosKey:        qosKey,
-		DataDir:       absDataDir,
-		QosWsUrl:      qosWsUrl,
-		JwtSecret:     jwtSecret,
-		AdminPassword:          adminPassword,
-		ExplicitAdminPassword:  explicitAdminPassword,
-		NewsAPIKey:          newsAPIKey,
-		NewsAPIDays:         newsAPIDays,
-		NewsAPIPageSize:     newsAPIPageSize,
-		NewsAPILanguages:    newsAPILanguages,
-		RecommendCandidates: recommendCandidates,
-		RecommendLimit:      recommendLimit,
+		Port:                 port,
+		DataDir:              absDataDir,
+		JwtSecret:            jwtSecret,
+		AdminPassword:        adminPassword,
+		ExplicitAdminPassword: explicitAdminPassword,
+		DeepSeekAPIKey:       deepSeekAPIKey,
+		DeepSeekModel:        deepSeekModel,
+		LLMCacheTTL:          llmCacheTTL,
+		RecommendLimit:       recommendLimit,
 	}
 }
 

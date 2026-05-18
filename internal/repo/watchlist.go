@@ -68,3 +68,22 @@ func (r *WatchlistRepo) Remove(userID int, symbol string) error {
 	}
 	return nil
 }
+
+// GetAllSymbols returns distinct symbols across all user watchlists.
+func (r *WatchlistRepo) GetAllSymbols() ([]string, error) {
+	rows, err := r.db.Query("SELECT DISTINCT symbol FROM watchlist")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var symbols []string
+	for rows.Next() {
+		var symbol string
+		if err := rows.Scan(&symbol); err != nil {
+			return nil, err
+		}
+		symbols = append(symbols, symbol)
+	}
+	return symbols, nil
+}

@@ -1,12 +1,13 @@
 package handler
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/black-eleven/stock-monitor/internal/qos"
+	"github.com/black-eleven/stock-monitor/internal/eastmoney"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,11 +18,11 @@ var ktMap = map[string]int{
 }
 
 type KlineHandler struct {
-	qos *qos.QosClient
+	client eastmoney.QuoteClient
 }
 
-func NewKlineHandler(qos *qos.QosClient) *KlineHandler {
-	return &KlineHandler{qos: qos}
+func NewKlineHandler(client eastmoney.QuoteClient) *KlineHandler {
+	return &KlineHandler{client: client}
 }
 
 func (h *KlineHandler) Register(api *gin.RouterGroup) {
@@ -49,11 +50,19 @@ func (h *KlineHandler) getKline(c *gin.Context) {
 		return
 	}
 
-	data, err := h.qos.FetchHistoryKlineCached(symbol, kt, count)
+	data, err := h.client.FetchHistoryKlineCached(symbol, kt, count)
 	if err != nil {
 		log.Printf("[Kline] Failed to fetch kline for %s (kt=%d): %v", symbol, kt, err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch kline data"})
 		return
 	}
-	c.JSON(http.StatusOK, data)
+
+	// Wrap in KlineItem format that frontend expects: [{"c": symbol, "k": [...]}]
+	if data == nil {
+		data = []json.RawMessage{}
+	}
+	wrap := []map[string]interface{}{
+		{"c": symbol, "k": data},
+	}
+	c.JSON(http.StatusOK, wrap)
 }

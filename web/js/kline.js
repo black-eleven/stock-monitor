@@ -8,11 +8,19 @@ class KlineComponent {
   }
 
   init() {
+    const BJ = 8 * 3600; // UTC+8 offset in seconds
+    const fmtBeijing = (time) => {
+      const d = new Date((time + BJ) * 1000);
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+    };
+
     this.chart = LightweightCharts.createChart(document.getElementById('klineChartContainer'), {
       layout: { background: { color: '#161b22' }, textColor: '#8b949e' },
       grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#30363d' },
+      localization: { timeFormatter: fmtBeijing },
       rightPriceScale: { borderColor: '#30363d' },
     });
 
@@ -93,14 +101,29 @@ class KlineComponent {
     }
   }
 
+  _getMAPeriods() {
+    switch (this.currentInterval) {
+      case '5m':  return [24, 48, 96];    // 2h, 4h, 8h
+      case '15m': return [16, 32, 64];    // 4h, 8h, 16h
+      case '30m': return [16, 32, 48];    // 8h, 16h, 24h
+      case '1h':  return [8, 20, 40];     // 1d, 2.5d, 5d
+      case '2h':  return [8, 16, 32];     // 2d, 4d, 8d
+      case '4h':  return [6, 12, 24];     // 2d, 4d, 8d
+      case '1w':  return [4, 13, 26];     // 1mo, 1qt, 2qt
+      case '1M':  return [3, 6, 12];      // 1qt, 2qt, 1yr
+      default:    return [5, 20, 60];     // 1d
+    }
+  }
+
   _drawIndicators(bars) {
     if (!bars || bars.length < 30) return;
     this._clearIndicators();
 
-    // Calculate indicators
-    const ma5 = calcMA(bars, 5);
-    const ma20 = calcMA(bars, 20);
-    const ma60 = calcMA(bars, 60);
+    // Calculate indicators with interval-scaled periods
+    const [p1, p2, p3] = this._getMAPeriods();
+    const ma5 = calcMA(bars, p1);
+    const ma20 = calcMA(bars, p2);
+    const ma60 = calcMA(bars, p3);
 
     // Store for cleanup
     this._maLines = [];
@@ -122,15 +145,7 @@ class KlineComponent {
       this._maLines.push(line);
     }
 
-    // Draw cross markers (golden cross / death cross)
     const crossMarkers = [];
-    for (let i = 1; i < ma5.length && i < ma20.length; i++) {
-      if (ma5[i - 1].value <= ma20[i - 1].value && ma5[i].value > ma20[i].value) {
-        crossMarkers.push({ time: ma5[i].time, position: 'belowBar', color: '#3fb950', shape: 'arrowUp', text: '金叉' });
-      } else if (ma5[i - 1].value >= ma20[i - 1].value && ma5[i].value < ma20[i].value) {
-        crossMarkers.push({ time: ma5[i].time, position: 'aboveBar', color: '#f85149', shape: 'arrowDown', text: '死叉' });
-      }
-    }
 
     // Draw buy/sell signal markers for latest bar
     const rsi = calcRSI(bars, 14);

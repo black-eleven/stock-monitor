@@ -1,6 +1,6 @@
 package model
 
-import "github.com/black-eleven/stock-monitor/internal/qos"
+import "github.com/black-eleven/stock-monitor/internal/eastmoney"
 
 type Quote struct {
 	Code      string  `json:"code"`
@@ -19,7 +19,7 @@ func (q Quote) GetCode() string  { return q.Code }
 func (q Quote) GetPrice() float64 { return q.Price }
 func (q Quote) GetYP() float64    { return q.YP }
 
-func FromQosQuote(q qos.Quote) Quote {
+func FromEMQuote(q eastmoney.Quote) Quote {
 	return Quote{
 		Code: q.Code, Price: q.Price, YP: q.YP,
 		Open: q.Open, High: q.High, Low: q.Low,
