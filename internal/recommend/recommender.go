@@ -2,6 +2,8 @@ package recommend
 
 import (
 	"fmt"
+	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -35,7 +37,6 @@ func NewRecommender(llmClient *llm.Client, emClient eastmoney.QuoteClient, cache
 }
 
 func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
-	// Check cache
 	r.mu.RLock()
 	if e, ok := r.cache[industry]; ok && time.Now().Before(e.expiresAt) {
 		recs := e.recs
@@ -44,39 +45,49 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	}
 	r.mu.RUnlock()
 
-	// 1. Call LLM for recommendations
 	candidates, err := r.llm.Recommend(industry)
 	if err != nil {
 		return nil, fmt.Errorf("llm recommend: %w", err)
 	}
-
 	if len(candidates) == 0 {
 		return []model.Recommendation{}, nil
 	}
 
-	// 2. Fetch quotes for candidates
+	// Fetch quotes for candidates
 	symbols := make([]string, 0, len(candidates))
 	for _, c := range candidates {
 		symbols = append(symbols, c.Symbol)
 	}
 	quotes := r.batchFetchQuotes(symbols)
 
-	// 3. Build recommendations
-	recs := make([]model.Recommendation, 0, len(candidates))
-	for _, c := range candidates {
+	// Score and build
+	total := len(candidates)
+	recs := make([]model.Recommendation, 0, total)
+	for i, c := range candidates {
 		price := 0.0
 		changePercent := 0.0
+		hasQuote := false
 		if q, ok := quotes[c.Symbol]; ok && q != nil {
+			hasQuote = true
 			price = q.Price
 			if q.YP != 0 {
 				changePercent = ((q.Price - q.YP) / q.YP) * 100
 			}
 		}
 
+		// Composite: LLM order 40% + Has quote 30% + Momentum 30%
+		llmScore := 1.0 - float64(i)/float64(total)
+		quoteScore := 0.0
+		if hasQuote {
+			quoteScore = 1.0
+		}
+		momentumScore := math.Max(0, math.Min(1, 0.5+changePercent*0.05))
+		finalScore := math.Round((llmScore*0.4+quoteScore*0.3+momentumScore*0.3)*100) / 100
+
 		rec := model.Recommendation{
 			Symbol:        c.Symbol,
 			Name:          c.Name,
-			Score:         1.0,
+			Score:         finalScore,
 			NewsCount:     1,
 			Price:         price,
 			ChangePercent: changePercent,
@@ -87,17 +98,19 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 		recs = append(recs, rec)
 	}
 
-	// Apply limit
+	// Sort by score descending
+	sort.Slice(recs, func(i, j int) bool {
+		return recs[i].Score > recs[j].Score
+	})
+
 	if len(recs) > r.limit {
 		recs = recs[:r.limit]
 	}
-
-	// Assign ranks
 	for i := range recs {
 		recs[i].Rank = i + 1
 	}
 
-	// 4. Cache
+	// Cache
 	r.mu.Lock()
 	r.cache[industry] = &cacheEntry{
 		recs:      recs,
