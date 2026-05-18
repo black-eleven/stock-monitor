@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -53,15 +54,15 @@ func (r *Recommender) Search(industry string, exclude []string) ([]model.Recomme
 		return []model.Recommendation{}, nil
 	}
 
-	// Filter out watchlist duplicates
+	// Filter out watchlist duplicates (normalize HK codes for comparison)
 	if len(exclude) > 0 {
 		excluded := make(map[string]bool, len(exclude))
 		for _, s := range exclude {
-			excluded[s] = true
+			excluded[normalizeCode(s)] = true
 		}
 		filtered := make([]llm.Candidate, 0, len(candidates))
 		for _, c := range candidates {
-			if !excluded[c.Symbol] {
+			if !excluded[normalizeCode(c.Symbol)] {
 				filtered = append(filtered, c)
 			}
 		}
@@ -148,6 +149,19 @@ func (r *Recommender) Search(industry string, exclude []string) ([]model.Recomme
 	r.mu.Unlock()
 
 	return recs, nil
+}
+
+// normalizeCode strips leading zeros from HK codes for comparison.
+func normalizeCode(symbol string) string {
+	if strings.HasPrefix(symbol, "HK:") {
+		code := strings.TrimPrefix(symbol, "HK:")
+		code = strings.TrimLeft(code, "0")
+		if code == "" {
+			code = "0"
+		}
+		return "HK:" + code
+	}
+	return symbol
 }
 
 func (r *Recommender) batchFetchQuotes(symbols []string) map[string]*eastmoney.Quote {
