@@ -69,7 +69,7 @@ func main() {
 	// Recommender
 	llmClient := llm.NewClient(cfg.DeepSeekAPIKey, cfg.DeepSeekModel)
 	recommender := recommend.NewRecommender(llmClient, emClient, cfg.LLMCacheTTL, cfg.RecommendLimit)
-	recommendH := handler.NewRecommendHandler(recommender)
+	recommendH := handler.NewRecommendHandler(recommender, watchlistRepo)
 
 	signalRepo := repo.NewSignalRepo(database)
 	signalH := handler.NewSignalHandler(signalRepo, hub)

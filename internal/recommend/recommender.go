@@ -36,7 +36,7 @@ func NewRecommender(llmClient *llm.Client, emClient eastmoney.QuoteClient, cache
 	}
 }
 
-func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
+func (r *Recommender) Search(industry string, exclude []string) ([]model.Recommendation, error) {
 	r.mu.RLock()
 	if e, ok := r.cache[industry]; ok && time.Now().Before(e.expiresAt) {
 		recs := e.recs
@@ -51,6 +51,24 @@ func (r *Recommender) Search(industry string) ([]model.Recommendation, error) {
 	}
 	if len(candidates) == 0 {
 		return []model.Recommendation{}, nil
+	}
+
+	// Filter out watchlist duplicates
+	if len(exclude) > 0 {
+		excluded := make(map[string]bool, len(exclude))
+		for _, s := range exclude {
+			excluded[s] = true
+		}
+		filtered := make([]llm.Candidate, 0, len(candidates))
+		for _, c := range candidates {
+			if !excluded[c.Symbol] {
+				filtered = append(filtered, c)
+			}
+		}
+		candidates = filtered
+		if len(candidates) == 0 {
+			return []model.Recommendation{}, nil
+		}
 	}
 
 	symbols := make([]string, 0, len(candidates))
