@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// toSecID converts QOS-format symbol (SH:600519, SZ:000001, HK:00700) to EastMoney secid.
+// toSecID converts market:code symbol (SH:600519, SZ:000001, HK:00700) to EastMoney secid.
 func toSecID(qosSymbol string) (string, error) {
 	parts := strings.SplitN(qosSymbol, ":", 2)
 	if len(parts) != 2 {
@@ -26,7 +26,7 @@ func toSecID(qosSymbol string) (string, error) {
 	}
 }
 
-// fromSecID converts EastMoney secid back to QOS-format symbol.
+// fromSecID converts EastMoney secid back to market:code symbol.
 func fromSecID(secID string) string {
 	parts := strings.SplitN(secID, ".", 2)
 	if len(parts) != 2 {
@@ -44,7 +44,7 @@ func fromSecID(secID string) string {
 	}
 }
 
-// ktToKlt converts QOS K-line type to EastMoney klt parameter.
+// ktToKlt converts K-line type to EastMoney klt parameter.
 func ktToKlt(kt int) int {
 	switch kt {
 	case 1:
