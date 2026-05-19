@@ -294,7 +294,7 @@ class AnalysisComponent {
 
     // Two-column layout: indicators (left) + strategy (right)
     html += '<div style="display:flex;gap:12px;align-items:flex-start;">';
-    html += '<div style="flex:1.3;min-width:0;">';
+    html += '<div style="flex:0.8;min-width:0;">';
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 
     for (const signal of result.signals.signals) {
@@ -327,7 +327,7 @@ class AnalysisComponent {
     html += '</div>';
 
     // Strategy analysis (right column)
-    html += '<div style="flex:0.8;min-width:0;">';
+    html += '<div style="flex:1.2;min-width:0;">';
     html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
@@ -491,7 +491,7 @@ class AnalysisComponent {
 
     // Two-column layout: indicators (left) + strategy (right)
     html += '<div style="display:flex;gap:12px;align-items:flex-start;">';
-    html += '<div style="flex:1.3;min-width:0;">';
+    html += '<div style="flex:0.8;min-width:0;">';
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 
     for (const signal of result.buySignals.signals) {
@@ -524,7 +524,7 @@ class AnalysisComponent {
     html += '</div>';
 
     // Strategy analysis (right column)
-    html += '<div style="flex:0.8;min-width:0;">';
+    html += '<div style="flex:1.2;min-width:0;">';
     html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
