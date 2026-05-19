@@ -11,6 +11,14 @@ class AnalysisComponent {
 
   async init() {
     this.watchlist = await this.api.getWatchlist();
+    try {
+      const resp = await this.api.get('/api/strategy/list');
+      this._strategies = (resp && resp.strategies) ? resp.strategies : [];
+      this._displayNames = (resp && resp.displayNames) ? resp.displayNames : [];
+    } catch (_) {
+      this._strategies = [];
+      this._displayNames = [];
+    }
     this.render();
   }
 
@@ -122,10 +130,11 @@ class AnalysisComponent {
     html += '<div style="margin-bottom:12px;">';
     html += '<select id="strategySelect" style="width:100%;padding:6px 10px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px;">';
     html += '<option value="">-- AI策略分析（选股后点击） --</option>';
-    html += '<option value="ma_golden_cross">均线金叉</option>';
-    html += '<option value="trend_follow">趋势跟踪</option>';
-    html += '<option value="volume_breakout">放量突破</option>';
-    html += '<option value="oversold_bounce">超跌反弹</option>';
+    for (let i = 0; i < (this._strategies || []).length; i++) {
+      const key = this._strategies[i];
+      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
+      html += '<option value="' + key + '">' + label + '</option>';
+    }
     html += '</select>';
     html += '</div>';
 

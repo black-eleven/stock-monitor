@@ -68,7 +68,12 @@ func (h *StrategyHandler) analyze(c *gin.Context) {
 }
 
 func (h *StrategyHandler) list(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"strategies": llm.StrategyNames()})
+	names := llm.StrategyNames()
+	displayNames := make([]string, len(names))
+	for i, k := range names {
+		displayNames[i] = llm.StrategyDisplayName(k)
+	}
+	c.JSON(http.StatusOK, gin.H{"strategies": names, "displayNames": displayNames})
 }
 
 func buildDataPrompt(symbol string, bars []barData) string {
