@@ -98,6 +98,7 @@ func (h *SignalHandler) checkThresholdCross(userID int, symbol string, latest mo
 	}
 
 	prev := recs[1] // most recent previous record (recs[0] is the latest we just inserted)
+		now := time.Now().Format(time.RFC3339)
 
 	// Threshold: cross from below 50% to >= 50%
 	if prev.BuyPct < 50 && latest.BuyPct >= 50 {
@@ -106,7 +107,8 @@ func (h *SignalHandler) checkThresholdCross(userID int, symbol string, latest mo
 			Type:    "buy",
 			OldPct:  prev.BuyPct,
 			NewPct:  latest.BuyPct,
-			Message: fmt.Sprintf("买入信号增强：从 %.0f%% 升至 %.0f%%（强烈买入）", prev.BuyPct, latest.BuyPct),
+			TriggeredAt: now,
+				Message: fmt.Sprintf("买入信号增强：从 %.0f%% 升至 %.0f%%（强烈买入）", prev.BuyPct, latest.BuyPct),
 		}
 	}
 	if prev.SellPct < 50 && latest.SellPct >= 50 {
@@ -115,7 +117,8 @@ func (h *SignalHandler) checkThresholdCross(userID int, symbol string, latest mo
 			Type:    "sell",
 			OldPct:  prev.SellPct,
 			NewPct:  latest.SellPct,
-			Message: fmt.Sprintf("卖出信号增强：从 %.0f%% 升至 %.0f%%（强烈卖出），注意风险", prev.SellPct, latest.SellPct),
+			TriggeredAt: now,
+				Message: fmt.Sprintf("卖出信号增强：从 %.0f%% 升至 %.0f%%（强烈卖出），注意风险", prev.SellPct, latest.SellPct),
 		}
 	}
 
@@ -126,7 +129,8 @@ func (h *SignalHandler) checkThresholdCross(userID int, symbol string, latest mo
 			Type:    "buy",
 			OldPct:  prev.BuyPct,
 			NewPct:  latest.BuyPct,
-			Message: fmt.Sprintf("出现买入信号：%.0f%%（值得关注）", latest.BuyPct),
+			TriggeredAt: now,
+				Message: fmt.Sprintf("出现买入信号：%.0f%%（值得关注）", latest.BuyPct),
 		}
 	}
 	if prev.SellPct < 25 && latest.SellPct >= 25 && latest.SellPct < 50 {
@@ -135,7 +139,8 @@ func (h *SignalHandler) checkThresholdCross(userID int, symbol string, latest mo
 			Type:    "sell",
 			OldPct:  prev.SellPct,
 			NewPct:  latest.SellPct,
-			Message: fmt.Sprintf("出现卖出信号：%.0f%%（注意风险）", latest.SellPct),
+			TriggeredAt: now,
+				Message: fmt.Sprintf("出现卖出信号：%.0f%%（注意风险）", latest.SellPct),
 		}
 	}
 
