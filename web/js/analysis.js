@@ -326,15 +326,15 @@ class AnalysisComponent {
     html += '</div>';
 
     // Strategy analysis (right column)
-    html += '<div style="flex:0.7;min-width:0;">';
-    html += '<select id="strategySelect" style="width:100%;padding:3px 8px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:4px;font-size:11px;margin-bottom:4px;">';
+    html += '<div style="flex:0.8;min-width:0;">';
+    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
       html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'event_driven') ? ' selected' : '') + '>' + label + '</option>';
     }
     html += '</select>';
-    html += '<div id="strategyResult" style="color:#e6edf3;line-height:1.35;white-space:pre-wrap;font-size:11px;"></div>';
+    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
     html += '</div></div>';
 
     container.innerHTML = html;
@@ -345,8 +345,8 @@ class AnalysisComponent {
 
     const formatMd = (text) => {
       return escapeHtml(text)
-        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:6px 0 2px;font-size:12px;">$1</h4>')
-        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:8px 0 2px;font-size:13px;">$1</h3>')
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
         .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
         .replace(/^(\d+)\. (.+)$/gm, '<span style="color:#58a6ff">$1.</span> $2')
@@ -522,15 +522,15 @@ class AnalysisComponent {
     html += '</div>';
 
     // Strategy analysis (right column)
-    html += '<div style="flex:0.7;min-width:0;">';
-    html += '<select id="strategySelect" style="width:100%;padding:3px 8px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:4px;font-size:11px;margin-bottom:4px;">';
+    html += '<div style="flex:0.8;min-width:0;">';
+    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
       html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'event_driven') ? ' selected' : '') + '>' + label + '</option>';
     }
     html += '</select>';
-    html += '<div id="strategyResult" style="color:#e6edf3;line-height:1.35;white-space:pre-wrap;font-size:11px;"></div>';
+    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
     html += '</div></div>';
 
     container.innerHTML = html;
@@ -541,8 +541,8 @@ class AnalysisComponent {
 
     const formatMd = (text) => {
       return escapeHtml(text)
-        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:6px 0 2px;font-size:12px;">$1</h4>')
-        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:8px 0 2px;font-size:13px;">$1</h3>')
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
         .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
         .replace(/^(\d+)\. (.+)$/gm, '<span style="color:#58a6ff">$1.</span> $2')
