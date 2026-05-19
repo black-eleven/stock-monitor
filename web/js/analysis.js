@@ -6,6 +6,7 @@ class AnalysisComponent {
     this._currentMode = 'sell';
     this._sortMode = 'score';
     this._exchangeFilter = 'ALL';
+    this._currentStrategy = '';
   }
 
   async init() {
@@ -46,6 +47,41 @@ class AnalysisComponent {
     this._recordSignal(symbol, buySignals, sellSignals);
   }
 
+  async _runStrategy(strategy) {
+    const container = document.getElementById('analysisInner');
+    container.innerHTML = '<div class="empty-state">AI策略分析中...</div>';
+
+    const items = this._getFilteredSorted(this._currentMode === 'buy' ? 'buySignals' : 'signals');
+    if (items.length === 0) {
+      container.innerHTML = '<div class="empty-state">无数据</div>';
+      return;
+    }
+
+    let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
+    html += '<h3 style="margin:8px 0;">策略分析结果</h3>';
+
+    for (const item of items) {
+      const result = this.results.get(item.symbol);
+      if (!result || !result.bars) continue;
+      html += '<div style="margin-bottom:16px;padding:12px;background:#161b22;border-radius:8px;border:1px solid #30363d;">';
+      html += '<strong>' + escapeHtml(item.name) + '</strong> <span style="color:#8b949e">' + escapeHtml(shortCode(item.symbol)) + '</span><br>';
+
+      try {
+        const bars = result.bars.map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
+        const resp = await this.api.post('/api/strategy/analyze', { strategy: strategy, symbol: item.symbol, bars: bars });
+        html += '<div style="color:#e6edf3;margin-top:8px;line-height:1.6;white-space:pre-wrap;">' + escapeHtml(resp.analysis || '无分析结果') + '</div>';
+      } catch (e) {
+        html += '<div style="color:#f85149;margin-top:8px;">分析失败: ' + escapeHtml(e.message) + '</div>';
+      }
+      html += '</div>';
+    }
+
+    container.innerHTML = html;
+    document.getElementById('analysisBack').addEventListener('click', function() {
+      this._showToggleView();
+    }.bind(this));
+  }
+
   async _recordSignal(symbol, buySignals, sellSignals) {
     try {
       const buyPct = Math.round((buySignals.score / buySignals.maxScore) * 100);
@@ -80,6 +116,17 @@ class AnalysisComponent {
     let html = '<div style="display:flex;gap:8px;margin-bottom:12px;">';
     html += '<button id="analysisSellBtn" style="flex:1;padding:8px;border:1px solid #30363d;background:' + (this._currentMode === 'sell' ? '#1f6feb' : '#161b22') + ';color:#e6edf3;border-radius:6px;cursor:pointer;font-size:14px;">卖出分析</button>';
     html += '<button id="analysisBuyBtn" style="flex:1;padding:8px;border:1px solid #30363d;background:' + (this._currentMode === 'buy' ? '#1f6feb' : '#161b22') + ';color:#e6edf3;border-radius:6px;cursor:pointer;font-size:14px;">买入推荐</button>';
+    html += '</div>';
+
+    // Strategy selector
+    html += '<div style="margin-bottom:12px;">';
+    html += '<select id="strategySelect" style="width:100%;padding:6px 10px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px;">';
+    html += '<option value="">-- AI策略分析（选股后点击） --</option>';
+    html += '<option value="ma_golden_cross">均线金叉</option>';
+    html += '<option value="trend_follow">趋势跟踪</option>';
+    html += '<option value="volume_breakout">放量突破</option>';
+    html += '<option value="oversold_bounce">超跌反弹</option>';
+    html += '</select>';
     html += '</div>';
 
     // Sort and exchange filter bar
@@ -118,6 +165,13 @@ class AnalysisComponent {
     document.getElementById('analysisBuyBtn').addEventListener('click', function() {
       this._currentMode = 'buy';
       this._showToggleView();
+    }.bind(this));
+
+    document.getElementById('strategySelect').addEventListener('change', function() {
+      this._currentStrategy = document.getElementById('strategySelect').value;
+      if (this._currentStrategy) {
+        this._runStrategy(this._currentStrategy);
+      }
     }.bind(this));
 
     if (this._currentMode === 'buy') {

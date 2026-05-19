@@ -62,58 +62,15 @@ type chatResponse struct {
 }
 
 func (c *Client) Recommend(industry string) ([]Candidate, error) {
-	reqBody := chatRequest{
-		Model: c.model,
-		Messages: []chatMessage{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: fmt.Sprintf("行业：%s", industry)},
-		},
-		Temperature:    0.3,
-		ResponseFormat: &responseFmt{Type: "json_object"},
-	}
-
-	body, _ := json.Marshal(reqBody)
-	req, err := http.NewRequest("POST", c.baseURL, strings.NewReader(string(body)))
+	content, err := c.chat(systemPrompt, fmt.Sprintf("行业：%s", industry), true)
 	if err != nil {
-		return nil, fmt.Errorf("llm request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("llm call: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("llm read: %w", err)
+		return nil, err
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("llm HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	var chatResp chatResponse
-	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf("llm parse: %w", err)
-	}
-	if chatResp.Error != nil {
-		return nil, fmt.Errorf("llm api error: %s", chatResp.Error.Message)
-	}
-	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("llm: no choices returned")
-	}
-
-	content := chatResp.Choices[0].Message.Content
-
-	// DeepSeek with json_object wraps in {"recommendations": [...]}
 	var wrapper struct {
 		Recommendations []Candidate `json:"recommendations"`
 	}
 	if err := json.Unmarshal([]byte(content), &wrapper); err != nil {
-		// Try direct array fallback
 		var candidates []Candidate
 		if err2 := json.Unmarshal([]byte(content), &candidates); err2 != nil {
 			return nil, fmt.Errorf("llm json parse: %w (content: %s)", err, truncate(content, 200))
@@ -121,6 +78,58 @@ func (c *Client) Recommend(industry string) ([]Candidate, error) {
 		return candidates, nil
 	}
 	return wrapper.Recommendations, nil
+}
+
+func (c *Client) Chat(systemPrompt, userPrompt string) (string, error) {
+	return c.chat(systemPrompt, userPrompt, false)
+}
+
+func (c *Client) chat(systemPrompt, userPrompt string, jsonMode bool) (string, error) {
+	reqBody := chatRequest{
+		Model: c.model,
+		Messages: []chatMessage{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+		Temperature: 0.3,
+	}
+	if jsonMode {
+		reqBody.ResponseFormat = &responseFmt{Type: "json_object"}
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req, err := http.NewRequest("POST", c.baseURL, strings.NewReader(string(body)))
+	if err != nil {
+		return "", fmt.Errorf("llm request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("llm call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("llm read: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("llm HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var chatResp chatResponse
+	if err := json.Unmarshal(respBody, &chatResp); err != nil {
+		return "", fmt.Errorf("llm parse: %w", err)
+	}
+	if chatResp.Error != nil {
+		return "", fmt.Errorf("llm api error: %s", chatResp.Error.Message)
+	}
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("llm: no choices returned")
+	}
+	return chatResp.Choices[0].Message.Content, nil
 }
 
 func truncate(s string, n int) string {
