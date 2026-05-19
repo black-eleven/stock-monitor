@@ -261,11 +261,16 @@ var strategyNames = map[string]string{
 }
 
 func StrategyNames() []string {
-	names := make([]string, 0, len(strategyNames))
+	// Put comprehensive first, then sort the rest alphabetically
+	names := []string{"comprehensive"}
+	rest := make([]string, 0, len(strategyNames)-1)
 	for k := range strategyNames {
-		names = append(names, k)
+		if k != "comprehensive" {
+			rest = append(rest, k)
+		}
 	}
-	sort.Strings(names)
+	sort.Strings(rest)
+	names = append(names, rest...)
 	return names
 }
 
