@@ -7,6 +7,11 @@ class AnalysisComponent {
     this._sortMode = 'score';
     this._exchangeFilter = 'ALL';
     this._currentStrategy = '';
+    this.quotes = {};
+  }
+
+  updateQuote(quote) {
+    this.quotes[quote.code] = quote;
   }
 
   async init() {
@@ -269,8 +274,21 @@ class AnalysisComponent {
       summaryColor = '#3fb950';
     }
 
+    const q = this.quotes[symbol];
     let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
+    if (q) {
+      const changeDir = q.price >= q.yp ? '+' : '';
+      const changeColor = q.price >= q.yp ? '#f85149' : '#3fb950';
+      html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;font-size:13px;">';
+      html += '<span>现价 <strong style="color:' + changeColor + '">' + formatPrice(q.price) + '</strong></span>';
+      html += '<span>涨幅 <strong style="color:' + changeColor + '">' + changeDir + (q.yp ? ((q.price - q.yp) / q.yp * 100).toFixed(2) : '--') + '%</strong></span>';
+      html += '<span>今开 ' + formatPrice(q.open) + '</span>';
+      html += '<span>最高 ' + formatPrice(q.high) + '</span>';
+      html += '<span>最低 ' + formatPrice(q.low) + '</span>';
+      html += '<span>昨收 ' + formatPrice(q.yp) + '</span>';
+      html += '</div>';
+    }
     html += '<div style="color:' + summaryColor + ';margin:8px 0;">卖出指数 <strong style="font-size:24px">' + pct + '%</strong> — ' + escapeHtml(result.signals.summary) + ' (' + count + '/' + result.signals.total + ')</div>';
 
     // Two-column layout: indicators (left) + strategy (right)
@@ -451,6 +469,19 @@ class AnalysisComponent {
 
     let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
+    const q2 = this.quotes[symbol];
+    if (q2) {
+      const changeDir = q2.price >= q2.yp ? '+' : '';
+      const changeColor = q2.price >= q2.yp ? '#f85149' : '#3fb950';
+      html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;font-size:13px;">';
+      html += '<span>现价 <strong style="color:' + changeColor + '">' + formatPrice(q2.price) + '</strong></span>';
+      html += '<span>涨幅 <strong style="color:' + changeColor + '">' + changeDir + (q2.yp ? ((q2.price - q2.yp) / q2.yp * 100).toFixed(2) : '--') + '%</strong></span>';
+      html += '<span>今开 ' + formatPrice(q2.open) + '</span>';
+      html += '<span>最高 ' + formatPrice(q2.high) + '</span>';
+      html += '<span>最低 ' + formatPrice(q2.low) + '</span>';
+      html += '<span>昨收 ' + formatPrice(q2.yp) + '</span>';
+      html += '</div>';
+    }
     html += '<div style="color:' + summaryColor + ';margin:8px 0;">买入指数 <strong style="font-size:24px">' + pct + '%</strong> — ' + escapeHtml(result.buySignals.summary) + ' (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
 
     // Two-column layout: indicators (left) + strategy (right)
