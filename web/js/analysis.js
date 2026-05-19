@@ -329,6 +329,11 @@ class AnalysisComponent {
       return escapeHtml(text)
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
         .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
+          const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
+          const pad = n => String(n).padStart(2, '0');
+          return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+        })
         .replace(/\n/g, '<br>');
     };
     const bars = result.bars;
@@ -504,6 +509,11 @@ class AnalysisComponent {
       return escapeHtml(text)
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
         .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
+          const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
+          const pad = n => String(n).padStart(2, '0');
+          return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+        })
         .replace(/\n/g, '<br>');
     };
     const bars = result.bars;
