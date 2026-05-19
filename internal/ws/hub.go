@@ -110,6 +110,15 @@ func (h *Hub) BroadcastAlert(alert interface{}) {
 }
 
 func (h *Hub) validateToken(tokenStr string) bool {
+	preview := tokenStr
+	if len(preview) > 50 {
+		preview = preview[:50]
+	}
+	secretPreview := h.jwtSecret
+	if len(secretPreview) > 8 {
+		secretPreview = secretPreview[:8]
+	}
+	log.Printf("[WS] secret=%s... token=%s...", secretPreview, preview)
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrSignatureInvalid
