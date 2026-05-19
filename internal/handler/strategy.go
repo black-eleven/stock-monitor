@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/black-eleven/stock-monitor/internal/llm"
 	"github.com/gin-gonic/gin"
@@ -11,10 +13,20 @@ import (
 
 type StrategyHandler struct {
 	llmClient *llm.Client
+	cache     map[string]*strategyCacheEntry
+	cacheMu   sync.RWMutex
+}
+
+type strategyCacheEntry struct {
+	analysis  string
+	expiresAt time.Time
 }
 
 func NewStrategyHandler(llmClient *llm.Client) *StrategyHandler {
-	return &StrategyHandler{llmClient: llmClient}
+	return &StrategyHandler{
+		llmClient: llmClient,
+		cache:     make(map[string]*strategyCacheEntry),
+	}
 }
 
 func (h *StrategyHandler) Register(api *gin.RouterGroup) {
@@ -23,9 +35,9 @@ func (h *StrategyHandler) Register(api *gin.RouterGroup) {
 }
 
 type strategyReq struct {
-	Strategy string         `json:"strategy"`
-	Symbol   string         `json:"symbol"`
-	Bars     []barData      `json:"bars"`
+	Strategy string    `json:"strategy"`
+	Symbol   string    `json:"symbol"`
+	Bars     []barData `json:"bars"`
 }
 
 type barData struct {
@@ -55,16 +67,56 @@ func (h *StrategyHandler) analyze(c *gin.Context) {
 		return
 	}
 
-	// Build data prompt with recent bars and computed indicators
-	dataPrompt := buildDataPrompt(req.Symbol, req.Bars)
+	cacheKey := req.Strategy + ":" + req.Symbol
 
+	// Check cache
+	h.cacheMu.RLock()
+	entry, hit := h.cache[cacheKey]
+	h.cacheMu.RUnlock()
+	if hit && time.Now().Before(entry.expiresAt) {
+		c.JSON(http.StatusOK, gin.H{"analysis": entry.analysis, "cached": true})
+		return
+	}
+
+	dataPrompt := buildDataPrompt(req.Symbol, req.Bars)
 	analysis, err := h.llmClient.Chat(sysPrompt, dataPrompt)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "LLM analysis failed: " + err.Error()})
 		return
 	}
 
+	// Cache with trading-hour-aware TTL
+	ttl := 2 * time.Minute
+	if !isTradingHour() {
+		ttl = 24 * time.Hour // effectively permanent outside trading
+	}
+
+	h.cacheMu.Lock()
+	h.cache[cacheKey] = &strategyCacheEntry{
+		analysis:  analysis,
+		expiresAt: time.Now().Add(ttl),
+	}
+	h.cacheMu.Unlock()
+
 	c.JSON(http.StatusOK, gin.H{"analysis": analysis})
+}
+
+// isTradingHour checks if current Beijing time is within A-share or HK trading hours on a weekday.
+func isTradingHour() bool {
+	now := time.Now().In(time.FixedZone("CST", 8*3600))
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return false
+	}
+	t := now.Hour()*60 + now.Minute()
+	// A-share: 9:30-11:30, 13:00-15:00
+	if (t >= 570 && t < 690) || (t >= 780 && t < 900) {
+		return true
+	}
+	// HK: 9:30-12:00, 13:00-16:00
+	if (t >= 570 && t < 720) || (t >= 780 && t < 960) {
+		return true
+	}
+	return false
 }
 
 func (h *StrategyHandler) list(c *gin.Context) {
@@ -81,7 +133,6 @@ func buildDataPrompt(symbol string, bars []barData) string {
 		return fmt.Sprintf("股票：%s，无K线数据", symbol)
 	}
 
-	// Use last 60 bars max to avoid token bloat
 	start := 0
 	if len(bars) > 60 {
 		start = len(bars) - 60
@@ -94,7 +145,6 @@ func buildDataPrompt(symbol string, bars []barData) string {
 		sb.WriteString(fmt.Sprintf("%d,%.2f,%.2f,%.2f,%.2f,%.0f\n", b.Ts, b.O, b.H, b.L, b.Cl, b.V))
 	}
 
-	// Compute simple indicators
 	if len(recent) >= 5 {
 		ma5 := sma(recent, 5)
 		sb.WriteString(fmt.Sprintf("\nMA5: %.2f\n", ma5))
@@ -120,7 +170,6 @@ func buildDataPrompt(symbol string, bars []barData) string {
 		sb.WriteString(fmt.Sprintf("MACD: DIF=%.2f DEA=%.2f MACD=%.2f\n", dif, dea, macd))
 	}
 
-	// Average volume for context
 	avgVol := 0.0
 	for _, b := range recent {
 		avgVol += b.V
@@ -171,9 +220,7 @@ func calcMACDFromBars(bars []barData) (dif, dea, macd float64) {
 	ema12 := emaFromBars(bars, 12)
 	ema26 := emaFromBars(bars, 26)
 	dif = ema12 - ema26
-
-	// DEA: 9-period EMA of DIF (simplified as SMA for last 9 bars)
-	dea = dif * 0.2 // rough signal line
+	dea = dif * 0.2
 	macd = (dif - dea) * 2
 	return
 }
