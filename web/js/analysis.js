@@ -325,14 +325,20 @@ class AnalysisComponent {
       this._renderList();
     }.bind(this));
 
+    const formatMd = (text) => {
+      return escapeHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
+        .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/\n/g, '<br>');
+    };
     const bars = result.bars;
     const runStrategy = (strategy) => {
-      document.getElementById('strategyResult').textContent = '分析中...';
+      document.getElementById('strategyResult').innerHTML = '分析中...';
       const barData = bars.map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
       this.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
-        document.getElementById('strategyResult').textContent = resp.analysis || '无分析结果';
+        document.getElementById('strategyResult').innerHTML = formatMd(resp.analysis || '无分析结果');
       }).catch(e => {
-        document.getElementById('strategyResult').textContent = '失败: ' + e.message;
+        document.getElementById('strategyResult').innerHTML = '失败: ' + e.message;
       });
     };
     document.getElementById('strategySelect').addEventListener('change', function() {
@@ -494,14 +500,20 @@ class AnalysisComponent {
       this._renderBuyList();
     }.bind(this));
 
+    const formatMd = (text) => {
+      return escapeHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
+        .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/\n/g, '<br>');
+    };
     const bars = result.bars;
     const runStrategy = (strategy) => {
-      document.getElementById('strategyResult').textContent = '分析中...';
+      document.getElementById('strategyResult').innerHTML = '分析中...';
       const barData = bars.map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
       this.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
-        document.getElementById('strategyResult').textContent = resp.analysis || '无分析结果';
+        document.getElementById('strategyResult').innerHTML = formatMd(resp.analysis || '无分析结果');
       }).catch(e => {
-        document.getElementById('strategyResult').textContent = '失败: ' + e.message;
+        document.getElementById('strategyResult').innerHTML = '失败: ' + e.message;
       });
     };
     document.getElementById('strategySelect').addEventListener('change', function() {
