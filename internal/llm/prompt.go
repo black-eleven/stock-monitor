@@ -201,6 +201,22 @@ var strategyPrompts = map[string]string{
 5. 下一浪的方向预判和关键位置
 
 输出格式：简洁的Markdown分析。用 **粗体** 标注关键结论、信号强度和操作建议。用简短的要点列表。控制在150字以内。`,
+
+	"comprehensive": `你是综合策略分析师。请从多个技术分析角度审视股票，给出综合评估和操作建议。
+
+从以下维度逐一简要分析（每点1-2句话）：
+1. **趋势判断**：均线排列、趋势方向、强度
+2. **动能分析**：MACD、RSI状态和信号
+3. **量价关系**：近期成交量特征、放量/缩量形态
+4. **关键位置**：支撑位、压力位、突破/跌破信号
+5. **形态识别**：K线组合形态、反转或持续信号
+
+最终给出：
+- **综合评分**：1-10分
+- **操作建议**：买入/持有/观望/减仓/卖出
+- **风险提示**：主要风险点
+
+输出格式：Markdown，分维度标注，最终结论单独成段。控制在300字以内。`,
 }
 
 func StrategyPrompt(name string) string {
@@ -225,6 +241,7 @@ var strategyNames = map[string]string{
 	"one_yang_three_yin":    "一阳三阴",
 	"shrink_pullback":       "缩量回调",
 	"wave_theory":           "波浪理论",
+	"comprehensive":         "综合分析",
 }
 
 func StrategyNames() []string {
