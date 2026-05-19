@@ -313,7 +313,7 @@ class AnalysisComponent {
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
-      html += '<option value="' + key + '">' + label + '</option>';
+      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'event_driven') ? ' selected' : '') + '>' + label + '</option>';
     }
     html += '</select>';
     html += '<div id="strategyResult" style="color:#e6edf3;line-height:1.6;white-space:pre-wrap;font-size:13px;"></div>';
@@ -342,9 +342,9 @@ class AnalysisComponent {
       });
     };
     document.getElementById('strategySelect').addEventListener('change', function() {
-      runStrategy(document.getElementById('strategySelect').value);
+      const v = document.getElementById('strategySelect').value; this._currentStrategy = v; runStrategy(v);
     });
-    runStrategy('event_driven');
+    runStrategy(this._currentStrategy || 'event_driven');
   }
 
   _renderBuyList() {
@@ -488,7 +488,7 @@ class AnalysisComponent {
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
-      html += '<option value="' + key + '">' + label + '</option>';
+      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'event_driven') ? ' selected' : '') + '>' + label + '</option>';
     }
     html += '</select>';
     html += '<div id="strategyResult" style="color:#e6edf3;line-height:1.6;white-space:pre-wrap;font-size:13px;"></div>';
@@ -517,8 +517,8 @@ class AnalysisComponent {
       });
     };
     document.getElementById('strategySelect').addEventListener('change', function() {
-      runStrategy(document.getElementById('strategySelect').value);
+      const v = document.getElementById('strategySelect').value; this._currentStrategy = v; runStrategy(v);
     });
-    runStrategy('event_driven');
+    runStrategy(this._currentStrategy || 'event_driven');
   }
 }

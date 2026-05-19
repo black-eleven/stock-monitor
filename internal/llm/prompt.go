@@ -1,5 +1,7 @@
 package llm
 
+import "sort"
+
 const systemPrompt = `你是一个股票推荐助手。用户输入一个行业或主题，请你推荐与该行业最相关的上市公司股票。
 
 要求：
@@ -230,6 +232,7 @@ func StrategyNames() []string {
 	for k := range strategyNames {
 		names = append(names, k)
 	}
+	sort.Strings(names)
 	return names
 }
 
