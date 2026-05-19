@@ -1,0 +1,304 @@
+package handler
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/black-eleven/stock-monitor/internal/llm"
+	"github.com/gin-gonic/gin"
+)
+
+type StrategyHandler struct {
+	llmClient *llm.Client
+	cache     map[string]*strategyCacheEntry
+	cacheMu   sync.RWMutex
+}
+
+type strategyCacheEntry struct {
+	analysis  string
+	expiresAt time.Time
+}
+
+func NewStrategyHandler(llmClient *llm.Client) *StrategyHandler {
+	return &StrategyHandler{
+		llmClient: llmClient,
+		cache:     make(map[string]*strategyCacheEntry),
+	}
+}
+
+func (h *StrategyHandler) Register(api *gin.RouterGroup) {
+	api.POST("/strategy/analyze", h.analyze)
+	api.GET("/strategy/list", h.list)
+}
+
+type strategyReq struct {
+	Strategy string    `json:"strategy"`
+	Symbol   string    `json:"symbol"`
+	Bars     []barData `json:"bars"`
+}
+
+type barData struct {
+	Ts int64   `json:"ts"`
+	O  float64 `json:"o"`
+	Cl float64 `json:"cl"`
+	H  float64 `json:"h"`
+	L  float64 `json:"l"`
+	V  float64 `json:"v"`
+}
+
+func (h *StrategyHandler) analyze(c *gin.Context) {
+	if h.llmClient == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "LLM not configured"})
+		return
+	}
+
+	var req strategyReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	strategyName := strings.TrimSpace(req.Strategy)
+	if llm.StrategyPrompt(strategyName) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown strategy: " + strategyName})
+		return
+	}
+
+	if strategyName == "comprehensive" {
+		h.analyzeComprehensive(c, req)
+		return
+	}
+
+	analysis := h.runSingle(strategyName, req.Symbol, req.Bars)
+	c.JSON(http.StatusOK, gin.H{"analysis": analysis})
+}
+
+// runSingle runs one strategy analysis with caching.
+func (h *StrategyHandler) runSingle(strategy, symbol string, bars []barData) string {
+	cacheKey := strategy + ":" + symbol
+
+	h.cacheMu.RLock()
+	e, hit := h.cache[cacheKey]
+	h.cacheMu.RUnlock()
+	if hit && time.Now().Before(e.expiresAt) {
+		return e.analysis
+	}
+
+	sysPrompt := llm.StrategyPrompt(strategy)
+	dataPrompt := buildDataPrompt(symbol, bars)
+	analysis, err := h.llmClient.Chat(sysPrompt, dataPrompt)
+	if err != nil {
+		return "分析失败: " + err.Error()
+	}
+
+	ttl := 2 * time.Minute
+	if !isTradingHour(symbol) {
+		ttl = 24 * time.Hour
+	}
+
+	h.cacheMu.Lock()
+	h.cache[cacheKey] = &strategyCacheEntry{analysis: analysis, expiresAt: time.Now().Add(ttl)}
+	h.cacheMu.Unlock()
+
+	return analysis
+}
+
+// analyzeComprehensive runs all individual strategies, collects their outputs,
+// then feeds them to the comprehensive LLM for final synthesis.
+func (h *StrategyHandler) analyzeComprehensive(c *gin.Context, req strategyReq) {
+	// Check comprehensive cache first
+	cacheKey := "comprehensive:" + req.Symbol
+	h.cacheMu.RLock()
+	e, hit := h.cache[cacheKey]
+	h.cacheMu.RUnlock()
+	if hit && time.Now().Before(e.expiresAt) {
+		c.JSON(http.StatusOK, gin.H{"analysis": e.analysis, "cached": true})
+		return
+	}
+
+	allNames := llm.StrategyNames()
+	// Exclude "comprehensive" itself
+	names := make([]string, 0, len(allNames))
+	for _, n := range allNames {
+		if n != "comprehensive" {
+			names = append(names, n)
+		}
+	}
+
+	// Run all strategies in parallel
+	type result struct {
+		name     string
+		analysis string
+	}
+	ch := make(chan result, len(names))
+	for _, name := range names {
+		go func(n string) {
+			ch <- result{name: n, analysis: h.runSingle(n, req.Symbol, req.Bars)}
+		}(name)
+	}
+
+	// Collect outputs
+	var sb strings.Builder
+	for i := 0; i < len(names); i++ {
+		r := <-ch
+		displayName := llm.StrategyDisplayName(r.name)
+		sb.WriteString(fmt.Sprintf("### %s\n%s\n\n", displayName, r.analysis))
+	}
+
+	// Run comprehensive synthesis
+	sysPrompt := llm.StrategyPrompt("comprehensive")
+	userPrompt := fmt.Sprintf("股票：%s\n\n以下是各策略分析结果：\n\n%s", req.Symbol, sb.String())
+	analysis, err := h.llmClient.Chat(sysPrompt, userPrompt)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "LLM analysis failed: " + err.Error()})
+		return
+	}
+
+	// Cache comprehensive result
+	ttl := 2 * time.Minute
+	if !isTradingHour(req.Symbol) {
+		ttl = 24 * time.Hour
+	}
+	h.cacheMu.Lock()
+	h.cache[cacheKey] = &strategyCacheEntry{analysis: analysis, expiresAt: time.Now().Add(ttl)}
+	h.cacheMu.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"analysis": analysis})
+}
+
+func isTradingHour(symbol string) bool {
+	now := time.Now().In(time.FixedZone("CST", 8*3600))
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return false
+	}
+	t := now.Hour()*60 + now.Minute()
+	switch {
+	case strings.HasPrefix(symbol, "SH:") || strings.HasPrefix(symbol, "SZ:"):
+		return (t >= 570 && t < 690) || (t >= 780 && t < 900)
+	case strings.HasPrefix(symbol, "HK:"):
+		return (t >= 570 && t < 720) || (t >= 780 && t < 960)
+	default:
+		return false
+	}
+}
+
+func (h *StrategyHandler) list(c *gin.Context) {
+	names := llm.StrategyNames()
+	displayNames := make([]string, len(names))
+	for i, k := range names {
+		displayNames[i] = llm.StrategyDisplayName(k)
+	}
+	c.JSON(http.StatusOK, gin.H{"strategies": names, "displayNames": displayNames})
+}
+
+func buildDataPrompt(symbol string, bars []barData) string {
+	if len(bars) == 0 {
+		return fmt.Sprintf("股票：%s，无K线数据", symbol)
+	}
+
+	start := 0
+	if len(bars) > 60 {
+		start = len(bars) - 60
+	}
+	recent := bars[start:]
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("股票：%s\n最近%d根K线数据（时间,开,高,低,收,量）：\n", symbol, len(recent)))
+	for _, b := range recent {
+		sb.WriteString(fmt.Sprintf("%d,%.2f,%.2f,%.2f,%.2f,%.0f\n", b.Ts, b.O, b.H, b.L, b.Cl, b.V))
+	}
+
+	if len(recent) >= 5 {
+		ma5 := sma(recent, 5)
+		sb.WriteString(fmt.Sprintf("\nMA5: %.2f\n", ma5))
+	}
+	if len(recent) >= 10 {
+		ma10 := sma(recent, 10)
+		sb.WriteString(fmt.Sprintf("MA10: %.2f\n", ma10))
+	}
+	if len(recent) >= 20 {
+		ma20 := sma(recent, 20)
+		sb.WriteString(fmt.Sprintf("MA20: %.2f\n", ma20))
+	}
+	if len(recent) >= 60 {
+		ma60 := sma(recent, 60)
+		sb.WriteString(fmt.Sprintf("MA60: %.2f\n", ma60))
+	}
+	if len(recent) >= 14 {
+		rsi := calcRSIFromBars(recent, 14)
+		sb.WriteString(fmt.Sprintf("RSI(14): %.1f\n", rsi))
+	}
+	if len(recent) >= 26 {
+		dif, dea, macd := calcMACDFromBars(recent)
+		sb.WriteString(fmt.Sprintf("MACD: DIF=%.2f DEA=%.2f MACD=%.2f\n", dif, dea, macd))
+	}
+
+	avgVol := 0.0
+	for _, b := range recent {
+		avgVol += b.V
+	}
+	avgVol /= float64(len(recent))
+	sb.WriteString(fmt.Sprintf("均量: %.0f\n", avgVol))
+
+	return sb.String()
+}
+
+func sma(bars []barData, period int) float64 {
+	if len(bars) < period {
+		return 0
+	}
+	sum := 0.0
+	for i := len(bars) - period; i < len(bars); i++ {
+		sum += bars[i].Cl
+	}
+	return sum / float64(period)
+}
+
+func calcRSIFromBars(bars []barData, period int) float64 {
+	if len(bars) < period+1 {
+		return 50
+	}
+	gain, loss := 0.0, 0.0
+	for i := len(bars) - period; i < len(bars); i++ {
+		diff := bars[i].Cl - bars[i-1].Cl
+		if diff > 0 {
+			gain += diff
+		} else {
+			loss -= diff
+		}
+	}
+	avgGain := gain / float64(period)
+	avgLoss := loss / float64(period)
+	if avgLoss == 0 {
+		return 100
+	}
+	rs := avgGain / avgLoss
+	return 100 - (100 / (1 + rs))
+}
+
+func calcMACDFromBars(bars []barData) (dif, dea, macd float64) {
+	if len(bars) < 26 {
+		return
+	}
+	ema12 := emaFromBars(bars, 12)
+	ema26 := emaFromBars(bars, 26)
+	dif = ema12 - ema26
+	dea = dif * 0.2
+	macd = (dif - dea) * 2
+	return
+}
+
+func emaFromBars(bars []barData, period int) float64 {
+	if len(bars) < period {
+		return 0
+	}
+	mult := 2.0 / float64(period+1)
+	ema := bars[len(bars)-period].Cl
+	for i := len(bars) - period + 1; i < len(bars); i++ {
+		ema = (bars[i].Cl-ema)*mult + ema
+	}
+	return ema
+}

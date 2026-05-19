@@ -151,6 +151,7 @@ async function init() {
   api.on('snapshot', (quotes) => {
     for (const quote of quotes) {
       watchlistComp.updateQuote(quote);
+      analysisComp.updateQuote(quote);
       holdingsComp.updateQuote(quote);
     }
   });
@@ -158,6 +159,7 @@ async function init() {
   // Handle real-time quotes
   api.on('quote', (quote) => {
     watchlistComp.updateQuote(quote);
+      analysisComp.updateQuote(quote);
     holdingsComp.updateQuote(quote);
   });
 

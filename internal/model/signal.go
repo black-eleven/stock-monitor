@@ -22,10 +22,11 @@ type SignalHistoryReq struct {
 }
 
 type SignalAlert struct {
-	Symbol    string  `json:"symbol"`
-	Name      string  `json:"name"`
-	Type      string  `json:"type"` // "buy" or "sell"
-	OldPct    float64 `json:"oldPct"`
-	NewPct    float64 `json:"newPct"`
-	Message   string  `json:"message"`
+	Symbol      string  `json:"symbol"`
+	Name        string  `json:"name"`
+	Type        string  `json:"type"` // "buy" or "sell"
+	OldPct      float64 `json:"oldPct"`
+	NewPct      float64 `json:"newPct"`
+	Message     string  `json:"message"`
+	TriggeredAt string  `json:"triggeredAt"`
 }

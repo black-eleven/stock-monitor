@@ -25,11 +25,25 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
   _SortMode _sortMode = _SortMode.score;
   String _exchangeFilter = 'ALL';
 
+  List<String> _strategyKeys = [];
+  List<String> _strategyNames = [];
+  String _currentStrategy = 'comprehensive';
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _analyze();
+    _loadStrategies();
+  }
+
+  Future<void> _loadStrategies() async {
+    try {
+      final api = ref.read(strategyApiProvider);
+      final keys = await api.getStrategyKeys();
+      final names = await api.getStrategies();
+      if (mounted) setState(() { _strategyKeys = keys; _strategyNames = names; });
+    } catch (_) {}
   }
 
   @override
@@ -42,6 +56,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
     setState(() => _loading = true);
     final watchlist = await ref.read(watchlistApiProvider).getAll();
     final quoteApi = ref.read(quoteApiProvider);
+    final signalApi = ref.read(signalApiProvider);
     final sellResults = <_Result>[];
     final buyResults = <_Result>[];
     for (final stock in watchlist) {
@@ -49,6 +64,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
         final data =
             await quoteApi.getKline(stock.symbol, interval: '1d', count: 100);
         final bars = <Bar>[];
+        final rawBars = <KlineBar>[];
         for (final item in data) {
           for (final k in item.k) {
             bars.add(Bar(
@@ -58,12 +74,29 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
                 low: k.l,
                 close: k.cl,
                 volume: k.v));
+            rawBars.add(k);
           }
         }
         bars.sort((a, b) => a.time.compareTo(b.time));
-        sellResults.add(_Result(stock: stock, signal: evaluateSignals(bars)));
-        buyResults
-            .add(_Result(stock: stock, signal: evaluateBuySignals(bars)));
+        final sell = evaluateSignals(bars);
+        final buy = evaluateBuySignals(bars);
+        sellResults.add(_Result(
+            stock: stock, signal: sell, bars: rawBars));
+        buyResults.add(_Result(
+            stock: stock, signal: buy, bars: rawBars));
+
+        // Record signals to backend
+        try {
+          await signalApi.record(
+            symbol: stock.symbol,
+            buyScore: double.parse((buy.score).toStringAsFixed(2)),
+            buyPct: ((buy.score / buy.maxScore) * 100).round(),
+            sellScore: double.parse((sell.score).toStringAsFixed(2)),
+            sellPct: ((sell.score / sell.maxScore) * 100).round(),
+            buyCount: buy.count,
+            sellCount: sell.count,
+          );
+        } catch (_) {}
       } catch (_) {}
     }
     _sort(sellResults);
@@ -91,11 +124,6 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
     return results
         .where((r) => r.stock.symbol.startsWith('$_exchangeFilter:'))
         .toList();
-  }
-
-  String _exchangePrefix(String symbol) {
-    final idx = symbol.indexOf(':');
-    return idx > 0 ? symbol.substring(0, idx) : '';
   }
 
   @override
@@ -219,14 +247,12 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
     final raw = isBuy ? _buyResults : _sellResults;
     if (raw == null || raw.isEmpty) {
       return const Center(
-          child:
-              Text('暂无数据', style: TextStyle(color: AppTheme.textSecondary)));
+          child: Text('暂无数据', style: TextStyle(color: AppTheme.textSecondary)));
     }
     final filtered = _applyFilter(raw);
     if (filtered.isEmpty) {
       return const Center(
-          child: Text('该交易所暂无数据',
-              style: TextStyle(color: AppTheme.textSecondary)));
+          child: Text('该交易所暂无数据', style: TextStyle(color: AppTheme.textSecondary)));
     }
     final label = isBuy ? '买入' : '卖出';
     return Column(children: [
@@ -247,8 +273,7 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
   Widget _buildSummary(List<_Result> results, String label) {
     final avgScore = results
             .map((r) => r.signal.score / r.signal.maxScore)
-            .reduce((a, b) => a + b) /
-        results.length;
+            .reduce((a, b) => a + b) / results.length;
     final color = avgScore >= 0.5
         ? (label == '买入' ? AppTheme.up : AppTheme.down)
         : avgScore >= 0.25
@@ -267,14 +292,11 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
               fontSize: 24, fontWeight: FontWeight.w800, color: color)),
       const SizedBox(width: 12),
       Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-              color: color.withAlpha(40),
-              borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration:
+              BoxDecoration(color: color.withAlpha(40), borderRadius: BorderRadius.circular(12)),
           child: Text(text,
-              style: TextStyle(
-                  color: color, fontWeight: FontWeight.w600))),
+              style: TextStyle(color: color, fontWeight: FontWeight.w600))),
     ]);
   }
 
@@ -312,55 +334,204 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen>
         : pct > 0
             ? Colors.orange
             : AppTheme.textSecondary;
+
+    // Auto-run comprehensive strategy analysis
+    String? _analysis;
+    bool _analyzing = true;
+    _runStrategy('comprehensive', r.stock.symbol, r.bars).then((a) {
+      if (mounted) {
+        _analysis = a;
+        _analyzing = false;
+        (context as Element).markNeedsBuild();
+      }
+    });
+
     showModalBottomSheet(
       context: context,
-      builder: (_) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${r.stock.name} (${r.stock.symbol})',
-                style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text(
-                '评分: ${(pct * 100).toStringAsFixed(0)}分 — ${r.signal.summary}',
-                style: TextStyle(color: color)),
-            const SizedBox(height: 12),
-            Text('${r.signal.count} / ${r.signal.total} 个信号触发',
-                style: const TextStyle(color: AppTheme.textSecondary)),
-            const SizedBox(height: 8),
-            ...r.signal.signals.where((s) => s.triggered).map((s) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(children: [
-                    Icon(
-                        s.status == 'danger'
-                            ? Icons.circle
-                            : Icons.warning_amber,
-                        size: 14,
-                        color: s.status == 'danger'
-                            ? (isBuy ? AppTheme.up : AppTheme.down)
-                            : Colors.orange),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        child:
-                            Text(s.name, style: const TextStyle(fontSize: 14))),
-                    if (s.value != null)
-                      Text(s.value!,
-                          style: const TextStyle(
-                              fontSize: 12, color: AppTheme.textSecondary)),
-                  ]),
-                )),
-          ],
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Container(
+          padding: const EdgeInsets.all(20),
+          height: MediaQuery.of(ctx).size.height * 0.85,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${r.stock.name} (${r.stock.symbol})',
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(
+                    '评分: ${(pct * 100).toStringAsFixed(0)}分 — ${r.signal.summary}',
+                    style: TextStyle(color: color)),
+                const SizedBox(height: 12),
+                Text('${r.signal.count} / ${r.signal.total} 个信号触发',
+                    style: const TextStyle(color: AppTheme.textSecondary)),
+                const SizedBox(height: 8),
+                ...r.signal.signals.where((s) => s.triggered).map((s) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(children: [
+                        Icon(
+                            s.status == 'danger'
+                                ? Icons.circle
+                                : Icons.warning_amber,
+                            size: 14,
+                            color: s.status == 'danger'
+                                ? (isBuy ? AppTheme.up : AppTheme.down)
+                                : Colors.orange),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(s.name,
+                            style: const TextStyle(fontSize: 14))),
+                        if (s.value != null)
+                          Text(s.value!,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppTheme.textSecondary)),
+                      ]),
+                    )),
+                const Divider(height: 24),
+                // Strategy selector
+                Row(children: [
+                  const Text('AI策略分析',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.accent)),
+                  const Spacer(),
+                  SizedBox(
+                    width: 150,
+                    child: DropdownButton<String>(
+                      value: _currentStrategy,
+                      isDense: true,
+                      dropdownColor: AppTheme.surface,
+                      style: const TextStyle(
+                          color: AppTheme.textPrimary, fontSize: 13),
+                      underline: Container(height: 0),
+                      items: _strategyKeys.isNotEmpty
+                          ? List.generate(_strategyKeys.length, (i) {
+                              return DropdownMenuItem(
+                                value: _strategyKeys[i],
+                                child: Text(_strategyNames[i],
+                                    style: const TextStyle(fontSize: 12)),
+                              );
+                            })
+                          : [
+                              const DropdownMenuItem(
+                                value: 'comprehensive',
+                                child: Text('综合分析'),
+                              )
+                            ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        _currentStrategy = v;
+                        setSheetState(() {
+                          _analyzing = true;
+                          _analysis = null;
+                        });
+                        _runStrategy(v, r.stock.symbol, r.bars).then((a) {
+                          setSheetState(() {
+                            _analysis = a;
+                            _analyzing = false;
+                          });
+                        });
+                      },
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 8),
+                if (_analyzing)
+                  const Center(
+                      child: Padding(
+                    padding: EdgeInsets.all(20),
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )),
+                if (_analysis != null)
+                  _buildMarkdown(_analysis!),
+              ],
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  Future<String> _runStrategy(
+      String strategy, String symbol, List<KlineBar> bars) async {
+    try {
+      final api = ref.read(strategyApiProvider);
+      return await api.analyze(strategy, symbol, bars);
+    } catch (e) {
+      return '分析失败: $e';
+    }
+  }
+
+  Widget _buildMarkdown(String text) {
+    final spans = <InlineSpan>[];
+    final lines = text.split('\n');
+    for (final line in lines) {
+      if (line.startsWith('### ')) {
+        spans.add(TextSpan(
+          text: '${line.substring(4)}\n',
+          style: const TextStyle(
+            color: AppTheme.accent,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ));
+      } else if (line.startsWith('## ')) {
+        spans.add(TextSpan(
+          text: '${line.substring(3)}\n',
+          style: const TextStyle(
+            color: Color(0xFFFFD700),
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ));
+      } else if (line.startsWith('- ')) {
+        spans.add(TextSpan(
+          text: '• ${line.substring(2)}\n',
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+        ));
+      } else {
+        // Handle **bold** and timestamps inline
+        final parts = line.split(RegExp(r'(\*\*.+?\*\*|\b1[7-9]\d{8}\b)'));
+        for (final part in parts) {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            spans.add(TextSpan(
+              text: part.substring(2, part.length - 2),
+              style: const TextStyle(
+                color: Color(0xFFFFD700),
+                fontWeight: FontWeight.w700,
+              ),
+            ));
+          } else if (RegExp(r'^1[7-9]\d{8}$').hasMatch(part)) {
+            final ts = int.tryParse(part) ?? 0;
+            final d = DateTime.fromMillisecondsSinceEpoch(
+                ts * 1000 + 8 * 3600 * 1000);
+            final pad = (int n) => n.toString().padLeft(2, '0');
+            spans.add(TextSpan(
+              text: '${d.year}-${pad(d.month)}-${pad(d.day)} ${pad(d.hour)}:${pad(d.minute)}',
+              style: const TextStyle(
+                color: Color(0xFFFFD700),
+                fontSize: 12,
+              ),
+            ));
+          } else {
+            spans.add(TextSpan(
+              text: part,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+            ));
+          }
+        }
+        spans.add(const TextSpan(text: '\n'));
+      }
+    }
+    return RichText(text: TextSpan(children: spans));
   }
 }
 
 class _Result {
   final WatchlistItem stock;
   final SignalResult signal;
-  _Result({required this.stock, required this.signal});
+  final List<KlineBar> bars;
+  _Result({required this.stock, required this.signal, required this.bars});
 }

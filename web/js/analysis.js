@@ -6,10 +6,24 @@ class AnalysisComponent {
     this._currentMode = 'sell';
     this._sortMode = 'score';
     this._exchangeFilter = 'ALL';
+    this._currentStrategy = '';
+    this.quotes = {};
+  }
+
+  updateQuote(quote) {
+    this.quotes[quote.code] = quote;
   }
 
   async init() {
     this.watchlist = await this.api.getWatchlist();
+    try {
+      const resp = await this.api.get('/api/strategy/list');
+      this._strategies = (resp && resp.strategies) ? resp.strategies : [];
+      this._displayNames = (resp && resp.displayNames) ? resp.displayNames : [];
+    } catch (_) {
+      this._strategies = [];
+      this._displayNames = [];
+    }
     this.render();
   }
 
@@ -262,8 +276,25 @@ class AnalysisComponent {
 
     let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
-    html += '<div style="color:' + summaryColor + ';margin:8px 0;">卖出指数 <strong style="font-size:24px">' + pct + '%</strong> — ' + escapeHtml(result.signals.summary) + ' (' + count + '/' + result.signals.total + ')</div>';
 
+    const q = this.quotes[symbol];
+    if (q) {
+      const changeDir = q.price >= q.yp ? '+' : '';
+      const changeColor = q.price >= q.yp ? '#f85149' : '#3fb950';
+      html += '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px;line-height:1.8;">';
+      html += '<span>现价 <strong style="color:' + changeColor + '">' + formatPrice(q.price) + '</strong></span>';
+      html += '<span>涨幅 <strong style="color:' + changeColor + '">' + changeDir + (q.yp ? ((q.price - q.yp) / q.yp * 100).toFixed(2) : '--') + '%</strong></span>';
+      html += '<span>今开 ' + formatPrice(q.open) + '</span>';
+      html += '<span>最高 ' + formatPrice(q.high) + '</span>';
+      html += '<span>最低 ' + formatPrice(q.low) + '</span>';
+      html += '<span>昨收 ' + formatPrice(q.yp) + '</span>';
+      html += '</div>';
+    }
+    html += '<div style="color:' + summaryColor + ';margin:4px 0 6px;">卖出指数 <strong style="font-size:18px">' + pct + '%</strong> — ' + escapeHtml(result.signals.summary) + ' (' + count + '/' + result.signals.total + ')</div>';
+
+    // Two-column layout: indicators (left) + strategy (right)
+    html += '<div style="display:flex;gap:12px;align-items:flex-start;">';
+    html += '<div style="flex:0.8;min-width:0;">';
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 
     for (const signal of result.signals.signals) {
@@ -293,11 +324,54 @@ class AnalysisComponent {
     }
 
     html += '</tbody></table>';
+    html += '</div>';
+
+    // Strategy analysis (right column)
+    html += '<div style="flex:1.2;min-width:0;">';
+    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
+    for (let i = 0; i < (this._strategies || []).length; i++) {
+      const key = this._strategies[i];
+      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
+      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'comprehensive') ? ' selected' : '') + '>' + label + '</option>';
+    }
+    html += '</select>';
+    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
+
+
     container.innerHTML = html;
 
     document.getElementById('analysisBack').addEventListener('click', function() {
       this._renderList();
     }.bind(this));
+
+    const formatMd = (text) => {
+      return escapeHtml(text)
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
+        .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/^(\d+)\. (.+)$/gm, '<span style="color:#58a6ff">$1.</span> $2')
+        .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
+          const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
+          const pad = n => String(n).padStart(2, '0');
+          return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+        })
+        .replace(/\n/g, '<br>');
+    };
+    const bars = result.bars;
+    const runStrategy = (strategy) => {
+      document.getElementById('strategyResult').innerHTML = '分析中...';
+      const barData = bars.map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
+      this.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
+        document.getElementById('strategyResult').innerHTML = formatMd(resp.analysis || '无分析结果');
+      }).catch(e => {
+        document.getElementById('strategyResult').innerHTML = '失败: ' + e.message;
+      });
+    };
+    document.getElementById('strategySelect').addEventListener('change', function() {
+      const v = document.getElementById('strategySelect').value; this._currentStrategy = v; runStrategy(v);
+    });
+    runStrategy(this._currentStrategy || 'comprehensive');
   }
 
   _renderBuyList() {
@@ -399,8 +473,25 @@ class AnalysisComponent {
 
     let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
-    html += '<div style="color:' + summaryColor + ';margin:8px 0;">买入指数 <strong style="font-size:24px">' + pct + '%</strong> — ' + escapeHtml(result.buySignals.summary) + ' (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
 
+    const q2 = this.quotes[symbol];
+    if (q2) {
+      const changeDir = q2.price >= q2.yp ? '+' : '';
+      const changeColor = q2.price >= q2.yp ? '#f85149' : '#3fb950';
+      html += '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px;line-height:1.8;">';
+      html += '<span>现价 <strong style="color:' + changeColor + '">' + formatPrice(q2.price) + '</strong></span>';
+      html += '<span>涨幅 <strong style="color:' + changeColor + '">' + changeDir + (q2.yp ? ((q2.price - q2.yp) / q2.yp * 100).toFixed(2) : '--') + '%</strong></span>';
+      html += '<span>今开 ' + formatPrice(q2.open) + '</span>';
+      html += '<span>最高 ' + formatPrice(q2.high) + '</span>';
+      html += '<span>最低 ' + formatPrice(q2.low) + '</span>';
+      html += '<span>昨收 ' + formatPrice(q2.yp) + '</span>';
+      html += '</div>';
+    }
+    html += '<div style="color:' + summaryColor + ';margin:4px 0 6px;">买入指数 <strong style="font-size:18px">' + pct + '%</strong> — ' + escapeHtml(result.buySignals.summary) + ' (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
+
+    // Two-column layout: indicators (left) + strategy (right)
+    html += '<div style="display:flex;gap:12px;align-items:flex-start;">';
+    html += '<div style="flex:0.8;min-width:0;">';
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 
     for (const signal of result.buySignals.signals) {
@@ -430,10 +521,53 @@ class AnalysisComponent {
     }
 
     html += '</tbody></table>';
+    html += '</div>';
+
+    // Strategy analysis (right column)
+    html += '<div style="flex:1.2;min-width:0;">';
+    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
+    for (let i = 0; i < (this._strategies || []).length; i++) {
+      const key = this._strategies[i];
+      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
+      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'comprehensive') ? ' selected' : '') + '>' + label + '</option>';
+    }
+    html += '</select>';
+    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
+    html += '</div></div>';
+
     container.innerHTML = html;
 
     document.getElementById('analysisBack').addEventListener('click', function() {
       this._renderBuyList();
     }.bind(this));
+
+    const formatMd = (text) => {
+      return escapeHtml(text)
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
+        .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/^(\d+)\. (.+)$/gm, '<span style="color:#58a6ff">$1.</span> $2')
+        .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
+          const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
+          const pad = n => String(n).padStart(2, '0');
+          return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+        })
+        .replace(/\n/g, '<br>');
+    };
+    const bars = result.bars;
+    const runStrategy = (strategy) => {
+      document.getElementById('strategyResult').innerHTML = '分析中...';
+      const barData = bars.map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
+      this.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
+        document.getElementById('strategyResult').innerHTML = formatMd(resp.analysis || '无分析结果');
+      }).catch(e => {
+        document.getElementById('strategyResult').innerHTML = '失败: ' + e.message;
+      });
+    };
+    document.getElementById('strategySelect').addEventListener('change', function() {
+      const v = document.getElementById('strategySelect').value; this._currentStrategy = v; runStrategy(v);
+    });
+    runStrategy(this._currentStrategy || 'comprehensive');
   }
 }

@@ -66,10 +66,18 @@ func main() {
 	quoteH := handler.NewQuoteHandler(emClient)
 	klineH := handler.NewKlineHandler(emClient)
 
+	// LLM Client (shared by recommender + strategy)
+	var llmClient *llm.Client
+	if cfg.DeepSeekAPIKey != "" {
+		llmClient = llm.NewClient(cfg.DeepSeekAPIKey, cfg.DeepSeekModel)
+	}
+
 	// Recommender
-	llmClient := llm.NewClient(cfg.DeepSeekAPIKey, cfg.DeepSeekModel)
 	recommender := recommend.NewRecommender(llmClient, emClient, cfg.LLMCacheTTL, cfg.RecommendLimit)
 	recommendH := handler.NewRecommendHandler(recommender, watchlistRepo)
+
+	// Strategy handler
+	strategyH := handler.NewStrategyHandler(llmClient)
 
 	signalRepo := repo.NewSignalRepo(database)
 	signalH := handler.NewSignalHandler(signalRepo, hub)
@@ -93,6 +101,7 @@ func main() {
 	klineH.Register(auth)
 	recommendH.Register(auth)
 	signalH.Register(auth)
+	strategyH.Register(auth)
 
 	// Admin routes
 	admin := auth.Group("/admin", middleware.AdminRequired())
@@ -130,7 +139,7 @@ func main() {
 }
 
 func pollQuotes(emClient *eastmoney.Client, watchlistRepo *repo.WatchlistRepo, hub *ws.Hub, alertEngine *alert.Engine) {
-	time.Sleep(2 * time.Second) // Wait for server to start
+	time.Sleep(2 * time.Second)
 	for {
 		codes := emClient.GetTrackedCodes()
 		if len(codes) > 0 {
