@@ -116,6 +116,9 @@ func (h *Hub) validateToken(tokenStr string) bool {
 		}
 		return []byte(h.jwtSecret), nil
 	})
+	if err != nil {
+		log.Printf("[WS] Token validation error: %v", err)
+	}
 	return err == nil && token.Valid
 }
 
