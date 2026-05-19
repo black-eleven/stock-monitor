@@ -33,6 +33,7 @@ class AuthManager {
     this.user = data.user;
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
+    if (typeof api !== 'undefined' && api) api.connectWs();
     return data;
   }
 
@@ -51,6 +52,7 @@ class AuthManager {
     this.user = data.user;
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
+    if (typeof api !== 'undefined' && api) api.connectWs();
     return data;
   }
 
