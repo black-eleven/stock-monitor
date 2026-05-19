@@ -109,6 +109,16 @@ func (h *StrategyHandler) runSingle(strategy, symbol string, bars []barData) str
 // analyzeComprehensive runs all individual strategies, collects their outputs,
 // then feeds them to the comprehensive LLM for final synthesis.
 func (h *StrategyHandler) analyzeComprehensive(c *gin.Context, req strategyReq) {
+	// Check comprehensive cache first
+	cacheKey := "comprehensive:" + req.Symbol
+	h.cacheMu.RLock()
+	e, hit := h.cache[cacheKey]
+	h.cacheMu.RUnlock()
+	if hit && time.Now().Before(e.expiresAt) {
+		c.JSON(http.StatusOK, gin.H{"analysis": e.analysis, "cached": true})
+		return
+	}
+
 	allNames := llm.StrategyNames()
 	// Exclude "comprehensive" itself
 	names := make([]string, 0, len(allNames))
@@ -152,7 +162,6 @@ func (h *StrategyHandler) analyzeComprehensive(c *gin.Context, req strategyReq) 
 	if !isTradingHour(req.Symbol) {
 		ttl = 24 * time.Hour
 	}
-	cacheKey := "comprehensive:" + req.Symbol
 	h.cacheMu.Lock()
 	h.cache[cacheKey] = &strategyCacheEntry{analysis: analysis, expiresAt: time.Now().Add(ttl)}
 	h.cacheMu.Unlock()
