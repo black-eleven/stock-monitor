@@ -277,12 +277,7 @@ class AnalysisComponent {
     let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
 
-    // Top row: quote info (left) + strategy analysis (right)
-    html += '<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:6px;">';
-
-    // Quote info
     const q = this.quotes[symbol];
-    html += '<div style="flex:1.5;min-width:0;">';
     if (q) {
       const changeDir = q.price >= q.yp ? '+' : '';
       const changeColor = q.price >= q.yp ? '#f85149' : '#3fb950';
@@ -295,22 +290,11 @@ class AnalysisComponent {
       html += '<span>昨收 ' + formatPrice(q.yp) + '</span>';
       html += '</div>';
     }
-    html += '<div style="color:' + summaryColor + ';margin:4px 0 0;">卖出指数 <strong style="font-size:18px">' + pct + '%</strong> — ' + escapeHtml(result.signals.summary) + ' (' + count + '/' + result.signals.total + ')</div>';
-    html += '</div>';
+    html += '<div style="color:' + summaryColor + ';margin:4px 0 6px;">卖出指数 <strong style="font-size:18px">' + pct + '%</strong> — ' + escapeHtml(result.signals.summary) + ' (' + count + '/' + result.signals.total + ')</div>';
 
-    // Strategy analysis
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
-    for (let i = 0; i < (this._strategies || []).length; i++) {
-      const key = this._strategies[i];
-      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
-      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'event_driven') ? ' selected' : '') + '>' + label + '</option>';
-    }
-    html += '</select>';
-    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
-    html += '</div></div>';
-
-    // Indicator table (full width)
+    // Two-column layout: indicators (left) + strategy (right)
+    html += '<div style="display:flex;gap:12px;align-items:flex-start;">';
+    html += '<div style="flex:1.3;min-width:0;">';
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 
     for (const signal of result.signals.signals) {
@@ -340,6 +324,19 @@ class AnalysisComponent {
     }
 
     html += '</tbody></table>';
+    html += '</div>';
+
+    // Strategy analysis (right column)
+    html += '<div style="flex:0.8;min-width:0;">';
+    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
+    for (let i = 0; i < (this._strategies || []).length; i++) {
+      const key = this._strategies[i];
+      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
+      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'event_driven') ? ' selected' : '') + '>' + label + '</option>';
+    }
+    html += '</select>';
+    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
+
 
     container.innerHTML = html;
 
@@ -477,11 +474,7 @@ class AnalysisComponent {
     let html = '<button id="analysisBack" style="background:none;border:none;color:#58a6ff;cursor:pointer;font-size:14px;padding:8px 0;">← 返回列表</button>';
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
 
-    // Top row: quote info (left) + strategy analysis (right)
-    html += '<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:6px;">';
-
     const q2 = this.quotes[symbol];
-    html += '<div style="flex:1.5;min-width:0;">';
     if (q2) {
       const changeDir = q2.price >= q2.yp ? '+' : '';
       const changeColor = q2.price >= q2.yp ? '#f85149' : '#3fb950';
@@ -494,22 +487,11 @@ class AnalysisComponent {
       html += '<span>昨收 ' + formatPrice(q2.yp) + '</span>';
       html += '</div>';
     }
-    html += '<div style="color:' + summaryColor + ';margin:4px 0 0;">买入指数 <strong style="font-size:18px">' + pct + '%</strong> — ' + escapeHtml(result.buySignals.summary) + ' (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
-    html += '</div>';
+    html += '<div style="color:' + summaryColor + ';margin:4px 0 6px;">买入指数 <strong style="font-size:18px">' + pct + '%</strong> — ' + escapeHtml(result.buySignals.summary) + ' (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
 
-    // Strategy analysis
-    html += '<div style="flex:1;min-width:0;">';
-    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
-    for (let i = 0; i < (this._strategies || []).length; i++) {
-      const key = this._strategies[i];
-      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
-      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'event_driven') ? ' selected' : '') + '>' + label + '</option>';
-    }
-    html += '</select>';
-    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
-    html += '</div></div>';
-
-    // Indicator table (full width)
+    // Two-column layout: indicators (left) + strategy (right)
+    html += '<div style="display:flex;gap:12px;align-items:flex-start;">';
+    html += '<div style="flex:1.3;min-width:0;">';
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 
     for (const signal of result.buySignals.signals) {
@@ -539,6 +521,19 @@ class AnalysisComponent {
     }
 
     html += '</tbody></table>';
+    html += '</div>';
+
+    // Strategy analysis (right column)
+    html += '<div style="flex:0.8;min-width:0;">';
+    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
+    for (let i = 0; i < (this._strategies || []).length; i++) {
+      const key = this._strategies[i];
+      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
+      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'event_driven') ? ' selected' : '') + '>' + label + '</option>';
+    }
+    html += '</select>';
+    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
+    html += '</div></div>';
 
     container.innerHTML = html;
 
