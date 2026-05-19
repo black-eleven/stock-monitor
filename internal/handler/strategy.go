@@ -87,8 +87,8 @@ func (h *StrategyHandler) analyze(c *gin.Context) {
 
 	// Cache with trading-hour-aware TTL
 	ttl := 2 * time.Minute
-	if !isTradingHour() {
-		ttl = 24 * time.Hour // effectively permanent outside trading
+	if !isTradingHour(req.Symbol) {
+		ttl = 24 * time.Hour
 	}
 
 	h.cacheMu.Lock()
@@ -101,22 +101,23 @@ func (h *StrategyHandler) analyze(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"analysis": analysis})
 }
 
-// isTradingHour checks if current Beijing time is within A-share or HK trading hours on a weekday.
-func isTradingHour() bool {
+// isTradingHour checks if the stock's market is currently in trading hours (Beijing time).
+func isTradingHour(symbol string) bool {
 	now := time.Now().In(time.FixedZone("CST", 8*3600))
 	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
 		return false
 	}
 	t := now.Hour()*60 + now.Minute()
-	// A-share: 9:30-11:30, 13:00-15:00
-	if (t >= 570 && t < 690) || (t >= 780 && t < 900) {
-		return true
+	switch {
+	case strings.HasPrefix(symbol, "SH:") || strings.HasPrefix(symbol, "SZ:"):
+		// A-share: 9:30-11:30, 13:00-15:00
+		return (t >= 570 && t < 690) || (t >= 780 && t < 900)
+	case strings.HasPrefix(symbol, "HK:"):
+		// HK: 9:30-12:00, 13:00-16:00
+		return (t >= 570 && t < 720) || (t >= 780 && t < 960)
+	default:
+		return false
 	}
-	// HK: 9:30-12:00, 13:00-16:00
-	if (t >= 570 && t < 720) || (t >= 780 && t < 960) {
-		return true
-	}
-	return false
 }
 
 func (h *StrategyHandler) list(c *gin.Context) {
