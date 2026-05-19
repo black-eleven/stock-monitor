@@ -219,7 +219,21 @@ var strategyPrompts = map[string]string{
 输出格式：Markdown，分维度标注，最终结论单独成段。控制在300字以内。`,
 }
 
+const comprehensivePrompt = `你是综合策略分析师。以下是多个专业策略对该股票的分析结论，请基于这些结论给出综合评估。
+
+要求：
+1. 提炼各策略的核心观点，合并同类项
+2. 标注各观点的共识程度（多数策略支持/存在分歧）
+3. 给出 **综合评分**（1-10分）
+4. 给出明确 **操作建议**：买入/持有/观望/减仓/卖出
+5. 列出主要 **风险提示**
+
+输出格式：Markdown。先总结共识与分歧，再给评分和建议。控制在300字以内。`
+
 func StrategyPrompt(name string) string {
+	if name == "comprehensive" {
+		return comprehensivePrompt
+	}
 	return strategyPrompts[name]
 }
 

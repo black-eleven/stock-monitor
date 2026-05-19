@@ -61,47 +61,105 @@ func (h *StrategyHandler) analyze(c *gin.Context) {
 		return
 	}
 
-	sysPrompt := llm.StrategyPrompt(strings.TrimSpace(req.Strategy))
-	if sysPrompt == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown strategy: " + req.Strategy})
+	strategyName := strings.TrimSpace(req.Strategy)
+	if llm.StrategyPrompt(strategyName) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown strategy: " + strategyName})
 		return
 	}
 
-	cacheKey := req.Strategy + ":" + req.Symbol
+	if strategyName == "comprehensive" {
+		h.analyzeComprehensive(c, req)
+		return
+	}
 
-	// Check cache
+	analysis := h.runSingle(strategyName, req.Symbol, req.Bars)
+	c.JSON(http.StatusOK, gin.H{"analysis": analysis})
+}
+
+// runSingle runs one strategy analysis with caching.
+func (h *StrategyHandler) runSingle(strategy, symbol string, bars []barData) string {
+	cacheKey := strategy + ":" + symbol
+
 	h.cacheMu.RLock()
-	entry, hit := h.cache[cacheKey]
+	e, hit := h.cache[cacheKey]
 	h.cacheMu.RUnlock()
-	if hit && time.Now().Before(entry.expiresAt) {
-		c.JSON(http.StatusOK, gin.H{"analysis": entry.analysis, "cached": true})
-		return
+	if hit && time.Now().Before(e.expiresAt) {
+		return e.analysis
 	}
 
-	dataPrompt := buildDataPrompt(req.Symbol, req.Bars)
+	sysPrompt := llm.StrategyPrompt(strategy)
+	dataPrompt := buildDataPrompt(symbol, bars)
 	analysis, err := h.llmClient.Chat(sysPrompt, dataPrompt)
+	if err != nil {
+		return "分析失败: " + err.Error()
+	}
+
+	ttl := 2 * time.Minute
+	if !isTradingHour(symbol) {
+		ttl = 24 * time.Hour
+	}
+
+	h.cacheMu.Lock()
+	h.cache[cacheKey] = &strategyCacheEntry{analysis: analysis, expiresAt: time.Now().Add(ttl)}
+	h.cacheMu.Unlock()
+
+	return analysis
+}
+
+// analyzeComprehensive runs all individual strategies, collects their outputs,
+// then feeds them to the comprehensive LLM for final synthesis.
+func (h *StrategyHandler) analyzeComprehensive(c *gin.Context, req strategyReq) {
+	allNames := llm.StrategyNames()
+	// Exclude "comprehensive" itself
+	names := make([]string, 0, len(allNames))
+	for _, n := range allNames {
+		if n != "comprehensive" {
+			names = append(names, n)
+		}
+	}
+
+	// Run all strategies in parallel
+	type result struct {
+		name     string
+		analysis string
+	}
+	ch := make(chan result, len(names))
+	for _, name := range names {
+		go func(n string) {
+			ch <- result{name: n, analysis: h.runSingle(n, req.Symbol, req.Bars)}
+		}(name)
+	}
+
+	// Collect outputs
+	var sb strings.Builder
+	for i := 0; i < len(names); i++ {
+		r := <-ch
+		displayName := llm.StrategyDisplayName(r.name)
+		sb.WriteString(fmt.Sprintf("### %s\n%s\n\n", displayName, r.analysis))
+	}
+
+	// Run comprehensive synthesis
+	sysPrompt := llm.StrategyPrompt("comprehensive")
+	userPrompt := fmt.Sprintf("股票：%s\n\n以下是各策略分析结果：\n\n%s", req.Symbol, sb.String())
+	analysis, err := h.llmClient.Chat(sysPrompt, userPrompt)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "LLM analysis failed: " + err.Error()})
 		return
 	}
 
-	// Cache with trading-hour-aware TTL
+	// Cache comprehensive result
 	ttl := 2 * time.Minute
 	if !isTradingHour(req.Symbol) {
 		ttl = 24 * time.Hour
 	}
-
+	cacheKey := "comprehensive:" + req.Symbol
 	h.cacheMu.Lock()
-	h.cache[cacheKey] = &strategyCacheEntry{
-		analysis:  analysis,
-		expiresAt: time.Now().Add(ttl),
-	}
+	h.cache[cacheKey] = &strategyCacheEntry{analysis: analysis, expiresAt: time.Now().Add(ttl)}
 	h.cacheMu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{"analysis": analysis})
 }
 
-// isTradingHour checks if the stock's market is currently in trading hours (Beijing time).
 func isTradingHour(symbol string) bool {
 	now := time.Now().In(time.FixedZone("CST", 8*3600))
 	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
@@ -110,10 +168,8 @@ func isTradingHour(symbol string) bool {
 	t := now.Hour()*60 + now.Minute()
 	switch {
 	case strings.HasPrefix(symbol, "SH:") || strings.HasPrefix(symbol, "SZ:"):
-		// A-share: 9:30-11:30, 13:00-15:00
 		return (t >= 570 && t < 690) || (t >= 780 && t < 900)
 	case strings.HasPrefix(symbol, "HK:"):
-		// HK: 9:30-12:00, 13:00-16:00
 		return (t >= 570 && t < 720) || (t >= 780 && t < 960)
 	default:
 		return false
