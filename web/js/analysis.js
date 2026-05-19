@@ -310,7 +310,6 @@ class AnalysisComponent {
     // Strategy analysis (right column)
     html += '<div style="flex:1;min-width:0;">';
     html += '<select id="strategySelect" style="width:100%;padding:6px 10px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px;margin-bottom:8px;">';
-    html += '<option value="">-- AI策略分析 --</option>';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
@@ -327,9 +326,7 @@ class AnalysisComponent {
     }.bind(this));
 
     const bars = result.bars;
-    document.getElementById('strategySelect').addEventListener('change', function() {
-      const strategy = document.getElementById('strategySelect').value;
-      if (!strategy) { document.getElementById('strategyResult').textContent = ''; return; }
+    const runStrategy = (strategy) => {
       document.getElementById('strategyResult').textContent = '分析中...';
       const barData = bars.map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
       this.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
@@ -337,7 +334,11 @@ class AnalysisComponent {
       }).catch(e => {
         document.getElementById('strategyResult').textContent = '失败: ' + e.message;
       });
-    }.bind(this));
+    };
+    document.getElementById('strategySelect').addEventListener('change', function() {
+      runStrategy(document.getElementById('strategySelect').value);
+    });
+    runStrategy('event_driven');
   }
 
   _renderBuyList() {
@@ -478,7 +479,6 @@ class AnalysisComponent {
     // Strategy analysis (right column)
     html += '<div style="flex:1;min-width:0;">';
     html += '<select id="strategySelect" style="width:100%;padding:6px 10px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px;margin-bottom:8px;">';
-    html += '<option value="">-- AI策略分析 --</option>';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
@@ -495,9 +495,7 @@ class AnalysisComponent {
     }.bind(this));
 
     const bars = result.bars;
-    document.getElementById('strategySelect').addEventListener('change', function() {
-      const strategy = document.getElementById('strategySelect').value;
-      if (!strategy) { document.getElementById('strategyResult').textContent = ''; return; }
+    const runStrategy = (strategy) => {
       document.getElementById('strategyResult').textContent = '分析中...';
       const barData = bars.map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
       this.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
@@ -505,6 +503,10 @@ class AnalysisComponent {
       }).catch(e => {
         document.getElementById('strategyResult').textContent = '失败: ' + e.message;
       });
-    }.bind(this));
+    };
+    document.getElementById('strategySelect').addEventListener('change', function() {
+      runStrategy(document.getElementById('strategySelect').value);
+    });
+    runStrategy('event_driven');
   }
 }
