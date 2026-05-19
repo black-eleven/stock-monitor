@@ -345,8 +345,11 @@ class AnalysisComponent {
 
     const formatMd = (text) => {
       return escapeHtml(text)
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:12px 0 4px;font-size:14px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:14px 0 4px;font-size:15px;">$1</h3>')
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
         .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/^(\d+)\. (.+)$/gm, '<span style="color:#58a6ff">$1.</span> $2')
         .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
           const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
           const pad = n => String(n).padStart(2, '0');
@@ -538,8 +541,11 @@ class AnalysisComponent {
 
     const formatMd = (text) => {
       return escapeHtml(text)
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:12px 0 4px;font-size:14px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:14px 0 4px;font-size:15px;">$1</h3>')
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
         .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/^(\d+)\. (.+)$/gm, '<span style="color:#58a6ff">$1.</span> $2')
         .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
           const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
           const pad = n => String(n).padStart(2, '0');
