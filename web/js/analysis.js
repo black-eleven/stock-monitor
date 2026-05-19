@@ -273,6 +273,9 @@ class AnalysisComponent {
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
     html += '<div style="color:' + summaryColor + ';margin:8px 0;">卖出指数 <strong style="font-size:24px">' + pct + '%</strong> — ' + escapeHtml(result.signals.summary) + ' (' + count + '/' + result.signals.total + ')</div>';
 
+    // Two-column layout: indicators (left) + strategy (right)
+    html += '<div style="display:flex;gap:16px;">';
+    html += '<div style="flex:1;min-width:0;">';
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 
     for (const signal of result.signals.signals) {
@@ -302,9 +305,10 @@ class AnalysisComponent {
     }
 
     html += '</tbody></table>';
+    html += '</div>';
 
-    // Strategy analysis section
-    html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #30363d;">';
+    // Strategy analysis (right column)
+    html += '<div style="flex:1;min-width:0;">';
     html += '<select id="strategySelect" style="width:100%;padding:6px 10px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px;margin-bottom:8px;">';
     html += '<option value="">-- AI策略分析 --</option>';
     for (let i = 0; i < (this._strategies || []).length; i++) {
@@ -314,7 +318,7 @@ class AnalysisComponent {
     }
     html += '</select>';
     html += '<div id="strategyResult" style="color:#e6edf3;line-height:1.6;white-space:pre-wrap;font-size:13px;"></div>';
-    html += '</div>';
+    html += '</div></div>';
 
     container.innerHTML = html;
 
@@ -437,6 +441,9 @@ class AnalysisComponent {
     html += '<h3 style="margin:8px 0;">' + escapeHtml(name) + ' (' + escapeHtml(shortCode(symbol)) + ')</h3>';
     html += '<div style="color:' + summaryColor + ';margin:8px 0;">买入指数 <strong style="font-size:24px">' + pct + '%</strong> — ' + escapeHtml(result.buySignals.summary) + ' (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
 
+    // Two-column layout: indicators (left) + strategy (right)
+    html += '<div style="display:flex;gap:16px;">';
+    html += '<div style="flex:1;min-width:0;">';
     html += '<table class="data-table"><thead><tr><th>指标</th><th>状态</th><th>数值</th></tr></thead><tbody>';
 
     for (const signal of result.buySignals.signals) {
@@ -466,9 +473,10 @@ class AnalysisComponent {
     }
 
     html += '</tbody></table>';
+    html += '</div>';
 
-    // Strategy analysis section
-    html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid #30363d;">';
+    // Strategy analysis (right column)
+    html += '<div style="flex:1;min-width:0;">';
     html += '<select id="strategySelect" style="width:100%;padding:6px 10px;background:#161b22;border:1px solid #30363d;color:#e6edf3;border-radius:6px;font-size:13px;margin-bottom:8px;">';
     html += '<option value="">-- AI策略分析 --</option>';
     for (let i = 0; i < (this._strategies || []).length; i++) {
@@ -478,7 +486,7 @@ class AnalysisComponent {
     }
     html += '</select>';
     html += '<div id="strategyResult" style="color:#e6edf3;line-height:1.6;white-space:pre-wrap;font-size:13px;"></div>';
-    html += '</div>';
+    html += '</div></div>';
 
     container.innerHTML = html;
 
