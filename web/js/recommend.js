@@ -2,7 +2,19 @@ class RecommendComponent {
   constructor(api, onAddToWatchlist) {
     this.api = api;
     this.onAddToWatchlist = onAddToWatchlist;
-    this.signals = new Map(); // symbol -> { buySignals, sellSignals }
+    this.signals = new Map(); // symbol -> { buySignals, sellSignals, bars }
+    this.aiScores = new Map(); // symbol -> { score, analysis }
+    this._strategies = [];
+    this._displayNames = [];
+    this._loadStrategies();
+  }
+
+  async _loadStrategies() {
+    try {
+      const resp = await this.api.get('/api/strategy/list');
+      this._strategies = (resp && resp.strategies) ? resp.strategies : [];
+      this._displayNames = (resp && resp.displayNames) ? resp.displayNames : [];
+    } catch (_) {}
   }
 
   async search(industry) {
@@ -11,6 +23,7 @@ class RecommendComponent {
       const recs = resp.recommendations || [];
       if (recs.length > 0) {
         await this.analyzeSignals(recs);
+        this._runAIAnalysis(recs);
       }
       return recs;
     } catch (err) {
@@ -47,10 +60,54 @@ class RecommendComponent {
         const macd = calcMACD(bars);
         const buySignals = evaluateBuySignals(bars, { ma5, ma20, ma60 }, rsi, macd);
         const sellSignals = evaluateSignals(bars, { ma5, ma20, ma60 }, rsi, macd);
-        this.signals.set(r.symbol, { buySignals, sellSignals });
+        this.signals.set(r.symbol, { buySignals, sellSignals, bars });
       } catch (_) {}
     });
     await Promise.all(promises);
+  }
+
+  async _runAIAnalysis(recs) {
+    this.aiScores.clear();
+    const promises = recs.map(async (r) => {
+      const sig = this.signals.get(r.symbol);
+      if (!sig) return;
+      try {
+        const barData = (sig.bars || []).map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
+        const resp = await this.api.post('/api/strategy/analyze', { strategy: 'comprehensive', symbol: r.symbol, bars: barData });
+        const analysis = resp.analysis || '';
+        // Try to extract a 1-10 score from the analysis text
+        const scoreMatch = analysis.match(/综合评分[：:]\s*(\d+(?:\.\d+)?)/) || analysis.match(/(\d+(?:\.\d+)?)\s*\/?\s*10\s*分/) || analysis.match(/评分[：:]\s*(\d+(?:\.\d+)?)/);
+        const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+        this.aiScores.set(r.symbol, { score: Math.min(10, Math.max(0, score)), analysis });
+      } catch (_) {}
+    });
+    await Promise.all(promises);
+    // Re-render with AI scores
+    const container = document.getElementById('recommendResults');
+    if (container && container.children.length > 0) {
+      const cards = Array.from(container.querySelectorAll('.recommend-card'));
+      // Update score display and re-sort cards
+      cards.forEach(card => {
+        const symbol = card.dataset.symbol;
+        const ai = this.aiScores.get(symbol);
+        if (ai && ai.score > 0) {
+          const metaEl = card.querySelector('.rec-meta');
+          if (metaEl) {
+            const aiSpan = metaEl.querySelector('.rec-ai-score');
+            if (aiSpan) aiSpan.remove();
+            metaEl.insertAdjacentHTML('beforeend', '<span class="rec-ai-score">🤖 AI评分 ' + ai.score.toFixed(1) + '/10</span>');
+          }
+        }
+      });
+      // Re-sort cards by AI score
+      cards.sort((a, b) => {
+        const aiA = this.aiScores.get(a.dataset.symbol);
+        const aiB = this.aiScores.get(b.dataset.symbol);
+        return (aiB && aiB.score || 0) - (aiA && aiA.score || 0);
+      });
+      const parent = container;
+      cards.forEach(c => parent.appendChild(c));
+    }
   }
 
   renderResults(recs) {
@@ -115,8 +172,9 @@ class RecommendComponent {
     // Bind signal detail clicks
     const self = this;
     container.querySelectorAll('.rec-signal-row').forEach(row => {
-      row.addEventListener('click', function() {
+      row.addEventListener('click', async function() {
         const symbol = this.dataset.symbol;
+        if (self._strategies.length === 0) await self._loadStrategies();
         self._showDetailModal(symbol);
       });
     });
@@ -169,7 +227,7 @@ class RecommendComponent {
     const sellColor = sellPct >= 50 ? '#f85149' : sellPct >= 25 ? '#d29922' : '#8b949e';
 
     let html = '<div class="rec-detail-overlay" id="recDetailOverlay">';
-    html += '<div class="rec-detail-modal">';
+    html += '<div class="rec-detail-modal" style="max-height:85vh;overflow-y:auto;">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
     html += '<h3 style="margin:0;">' + escapeHtml(name) + ' <span style="font-weight:normal;font-size:14px;color:#8b949e;">' + escapeHtml(shortCode(symbol)) + '</span></h3>';
     html += '<button id="recDetailClose" style="background:none;border:none;color:#8b949e;font-size:24px;cursor:pointer;">&times;</button>';
@@ -201,6 +259,29 @@ class RecommendComponent {
     }
     html += '</tbody></table>';
 
+    // AI Strategy analysis
+    const strategyKeys = this._strategies.length > 0 ? this._strategies : [
+      'comprehensive','bottom_volume','box_oscillation','bull_trend','chan_theory',
+      'dragon_head','emotion_cycle','event_driven','expectation_repricing','growth_quality',
+      'hot_theme','ma_golden_cross','one_yang_three_yin','oversold_bounce','shrink_pullback',
+      'trend_follow','volume_breakout','wave_theory'
+    ];
+    const strategyLabels = this._displayNames.length > 0 ? this._displayNames : [
+      '综合分析','底部缩量','箱体震荡','牛市趋势','缠论',
+      '龙头战法','情绪周期','事件驱动','预期重定价','成长质量',
+      '热点主题','均线金叉','一阳三阴','超跌反弹','缩量回调',
+      '趋势跟踪','放量突破','波浪理论'
+    ];
+    html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">';
+    html += '<h4 style="color:#58a6ff;margin:0 0 6px;font-size:14px;">AI策略分析</h4>';
+    html += '<select id="recStrategySelect" style="width:100%;padding:4px 8px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:14px;margin-bottom:6px;">';
+    for (let i = 0; i < strategyKeys.length; i++) {
+      html += '<option value="' + strategyKeys[i] + '">' + strategyLabels[i] + '</option>';
+    }
+    html += '</select>';
+    html += '<div id="recStrategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
+    html += '</div>';
+
     html += '</div></div>';
 
     // Remove existing modal if any
@@ -215,5 +296,37 @@ class RecommendComponent {
     document.getElementById('recDetailOverlay').addEventListener('click', (e) => {
       if (e.target.id === 'recDetailOverlay') document.getElementById('recDetailOverlay').remove();
     });
+
+    // Strategy analysis
+    const self = this;
+    const bars = sig.bars;
+    const formatMd = (text) => {
+      return escapeHtml(text)
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
+        .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
+          const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
+          const pad2 = n => String(n).padStart(2, '0');
+          return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate()) + ' ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+        })
+        .replace(/\n/g, '<br>');
+    };
+    const runStrategy = (strategy) => {
+      const el = document.getElementById('recStrategyResult');
+      if (!el) return;
+      el.innerHTML = '分析中...';
+      const barData = (bars || []).map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
+      self.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
+        el.innerHTML = formatMd(resp.analysis || '无分析结果');
+      }).catch(e => {
+        el.innerHTML = '失败: ' + e.message;
+      });
+    };
+    document.getElementById('recStrategySelect').addEventListener('change', function() {
+      runStrategy(this.value);
+    });
+    runStrategy('comprehensive');
   }
 }

@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    container_name: stock-monitor
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=3000
+      - DATA_DIR=/app/data
+      - JWT_SECRET=${JWT_SECRET:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-deepseek-chat}
+      - LLM_CACHE_TTL=${LLM_CACHE_TTL:-30}
+      - RECOMMEND_LIMIT=${RECOMMEND_LIMIT:-8}
+    restart: unless-stopped

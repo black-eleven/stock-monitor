@@ -281,7 +281,7 @@ class AnalysisComponent {
     if (q) {
       const changeDir = q.price >= q.yp ? '+' : '';
       const changeColor = q.price >= q.yp ? '#f85149' : '#3fb950';
-      html += '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px;line-height:1.8;">';
+      html += '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:14px;line-height:1.8;">';
       html += '<span>现价 <strong style="color:' + changeColor + '">' + formatPrice(q.price) + '</strong></span>';
       html += '<span>涨幅 <strong style="color:' + changeColor + '">' + changeDir + (q.yp ? ((q.price - q.yp) / q.yp * 100).toFixed(2) : '--') + '%</strong></span>';
       html += '<span>今开 ' + formatPrice(q.open) + '</span>';
@@ -328,7 +328,7 @@ class AnalysisComponent {
 
     // Strategy analysis (right column)
     html += '<div style="flex:1.2;min-width:0;">';
-    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
+    html += '<select id="strategySelect" style="width:100%;padding:4px 8px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:14px;margin-bottom:4px;">';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
@@ -346,7 +346,7 @@ class AnalysisComponent {
 
     const formatMd = (text) => {
       return escapeHtml(text)
-        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:14px;">$1</h4>')
         .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
         .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
@@ -478,7 +478,7 @@ class AnalysisComponent {
     if (q2) {
       const changeDir = q2.price >= q2.yp ? '+' : '';
       const changeColor = q2.price >= q2.yp ? '#f85149' : '#3fb950';
-      html += '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:13px;line-height:1.8;">';
+      html += '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:14px;line-height:1.8;">';
       html += '<span>现价 <strong style="color:' + changeColor + '">' + formatPrice(q2.price) + '</strong></span>';
       html += '<span>涨幅 <strong style="color:' + changeColor + '">' + changeDir + (q2.yp ? ((q2.price - q2.yp) / q2.yp * 100).toFixed(2) : '--') + '%</strong></span>';
       html += '<span>今开 ' + formatPrice(q2.open) + '</span>';
@@ -525,7 +525,7 @@ class AnalysisComponent {
 
     // Strategy analysis (right column)
     html += '<div style="flex:1.2;min-width:0;">';
-    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
+    html += '<select id="strategySelect" style="width:100%;padding:4px 8px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:14px;margin-bottom:4px;">';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
@@ -543,7 +543,7 @@ class AnalysisComponent {
 
     const formatMd = (text) => {
       return escapeHtml(text)
-        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:14px;">$1</h4>')
         .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
         .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
