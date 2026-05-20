@@ -3,6 +3,7 @@ class RecommendComponent {
     this.api = api;
     this.onAddToWatchlist = onAddToWatchlist;
     this.signals = new Map(); // symbol -> { buySignals, sellSignals, bars }
+    this.aiScores = new Map(); // symbol -> { score, analysis }
     this._strategies = [];
     this._displayNames = [];
     this._loadStrategies();
@@ -22,6 +23,7 @@ class RecommendComponent {
       const recs = resp.recommendations || [];
       if (recs.length > 0) {
         await this.analyzeSignals(recs);
+        this._runAIAnalysis(recs);
       }
       return recs;
     } catch (err) {
@@ -62,6 +64,50 @@ class RecommendComponent {
       } catch (_) {}
     });
     await Promise.all(promises);
+  }
+
+  async _runAIAnalysis(recs) {
+    this.aiScores.clear();
+    const promises = recs.map(async (r) => {
+      const sig = this.signals.get(r.symbol);
+      if (!sig) return;
+      try {
+        const barData = (sig.bars || []).map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
+        const resp = await this.api.post('/api/strategy/analyze', { strategy: 'comprehensive', symbol: r.symbol, bars: barData });
+        const analysis = resp.analysis || '';
+        // Try to extract a 1-10 score from the analysis text
+        const scoreMatch = analysis.match(/综合评分[：:]\s*(\d+(?:\.\d+)?)/) || analysis.match(/(\d+(?:\.\d+)?)\s*\/?\s*10\s*分/) || analysis.match(/评分[：:]\s*(\d+(?:\.\d+)?)/);
+        const score = scoreMatch ? parseFloat(scoreMatch[1]) : 0;
+        this.aiScores.set(r.symbol, { score: Math.min(10, Math.max(0, score)), analysis });
+      } catch (_) {}
+    });
+    await Promise.all(promises);
+    // Re-render with AI scores
+    const container = document.getElementById('recommendResults');
+    if (container && container.children.length > 0) {
+      const cards = Array.from(container.querySelectorAll('.recommend-card'));
+      // Update score display and re-sort cards
+      cards.forEach(card => {
+        const symbol = card.dataset.symbol;
+        const ai = this.aiScores.get(symbol);
+        if (ai && ai.score > 0) {
+          const metaEl = card.querySelector('.rec-meta');
+          if (metaEl) {
+            const aiSpan = metaEl.querySelector('.rec-ai-score');
+            if (aiSpan) aiSpan.remove();
+            metaEl.insertAdjacentHTML('beforeend', '<span class="rec-ai-score">🤖 AI评分 ' + ai.score.toFixed(1) + '/10</span>');
+          }
+        }
+      });
+      // Re-sort cards by AI score
+      cards.sort((a, b) => {
+        const aiA = this.aiScores.get(a.dataset.symbol);
+        const aiB = this.aiScores.get(b.dataset.symbol);
+        return (aiB && aiB.score || 0) - (aiA && aiA.score || 0);
+      });
+      const parent = container;
+      cards.forEach(c => parent.appendChild(c));
+    }
   }
 
   renderResults(recs) {
