@@ -1,0 +1,14 @@
+.git
+.gitignore
+data
+bin
+mobile
+node_modules
+.env
+*.md
+CLAUDE.md
+README.html
+docs
+migrate
+Makefile
+server
