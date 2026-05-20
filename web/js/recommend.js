@@ -214,14 +214,23 @@ class RecommendComponent {
     html += '</tbody></table>';
 
     // AI Strategy analysis
+    const strategyKeys = this._strategies.length > 0 ? this._strategies : [
+      'comprehensive','bottom_volume','box_oscillation','bull_trend','chan_theory',
+      'dragon_head','emotion_cycle','event_driven','expectation_repricing','growth_quality',
+      'hot_theme','ma_golden_cross','one_yang_three_yin','oversold_bounce','shrink_pullback',
+      'trend_follow','volume_breakout','wave_theory'
+    ];
+    const strategyLabels = this._displayNames.length > 0 ? this._displayNames : [
+      '综合分析','底部缩量','箱体震荡','牛市趋势','缠论',
+      '龙头战法','情绪周期','事件驱动','预期重定价','成长质量',
+      '热点主题','均线金叉','一阳三阴','超跌反弹','缩量回调',
+      '趋势跟踪','放量突破','波浪理论'
+    ];
     html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">';
+    html += '<h4 style="color:#58a6ff;margin:0 0 6px;font-size:14px;">AI策略分析</h4>';
     html += '<select id="recStrategySelect" style="width:100%;padding:4px 8px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:14px;margin-bottom:6px;">';
-    html += '<option value="comprehensive">综合分析</option>';
-    for (let i = 0; i < (this._strategies || []).length; i++) {
-      const key = this._strategies[i];
-      if (key === 'comprehensive') continue;
-      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
-      html += '<option value="' + key + '">' + label + '</option>';
+    for (let i = 0; i < strategyKeys.length; i++) {
+      html += '<option value="' + strategyKeys[i] + '">' + strategyLabels[i] + '</option>';
     }
     html += '</select>';
     html += '<div id="recStrategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
