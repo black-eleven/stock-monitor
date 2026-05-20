@@ -7,39 +7,16 @@
 <style>
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    max-width: 860px;
-    margin: 40px auto;
-    padding: 0 20px;
-    line-height: 1.7;
-    color: #333;
+    max-width: 860px; margin: 40px auto; padding: 0 20px; line-height: 1.7; color: #333;
   }
   h1 { font-size: 1.8em; border-bottom: 2px solid #eee; padding-bottom: 10px; }
   h2 { font-size: 1.4em; margin-top: 36px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
   h3 { font-size: 1.1em; margin-top: 24px; }
-  code {
-    background: #f4f4f4;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 0.9em;
-  }
-  pre {
-    background: #f4f4f4;
-    padding: 12px 16px;
-    border-radius: 6px;
-    overflow-x: auto;
-    font-size: 0.9em;
-  }
+  code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: #f4f4f4; padding: 12px 16px; border-radius: 6px; overflow-x: auto; font-size: 0.9em; }
   pre code { background: none; padding: 0; }
-  table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 12px 0;
-  }
-  th, td {
-    border: 1px solid #ddd;
-    padding: 8px 12px;
-    text-align: left;
-  }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
   th { background: #f7f7f7; font-weight: 600; }
   hr { border: none; border-top: 1px solid #eee; margin: 32px 0; }
 </style>
@@ -48,99 +25,57 @@
 
 <h1>Stock Monitor — 使用说明书</h1>
 
-<p>一个基于 <strong>Go 后端 + SQLite</strong> 的个人股票盯盘工具。支持 A 股（沪深）、港股的实时行情、K 线技术分析、持仓盈亏跟踪、价格预警和 AI 智能荐股。</p>
+<p>基于 <strong>Go 后端 + SQLite</strong> 的个人股票盯盘工具。支持 A 股（沪深）、港股的实时行情、K 线技术分析、持仓盈亏跟踪、价格预警、AI 智能荐股和策略分析。提供 Web 前端 + Flutter 移动端。</p>
 
 <hr>
 
 <h2>快速开始</h2>
 
 <h3>1. 编译</h3>
-
 <pre><code>go build -o bin/server ./cmd/server</code></pre>
 
-<h3>2. 配置</h3>
-
-<p>编辑 <code>.env</code> 文件：</p>
-
+<h3>2. 配置 .env</h3>
 <pre><code>PORT=3000
 JWT_SECRET=自定义密钥
 ADMIN_PASSWORD=管理员密码
-DEEPSEEK_API_KEY=sk-xxx    # 可选，启用 AI 荐股</code></pre>
+DEEPSEEK_API_KEY=sk-xxx    # 可选，启用 AI 功能</code></pre>
 
 <h3>3. 启动</h3>
-
 <pre><code>./bin/server</code></pre>
-
-<p>首次启动会生成管理员账号密码并打印在日志中。</p>
-
-<h3>4. 打开浏览器</h3>
-
-<p>访问 <a href="http://localhost:3000">http://localhost:3000</a></p>
+<p>首次启动会生成管理员账号密码并打印在日志中。访问 <a href="http://localhost:3000">http://localhost:3000</a></p>
 
 <hr>
 
 <h2>功能说明</h2>
 
-<h3>自选股</h3>
-
-<p><strong>添加股票：</strong> 点击 <code>+ 添加自选股</code> 按钮，输入股票代码和名称。</p>
-<p>港股：<code>HK:0700</code>（腾讯）、A 股：<code>SH:600519</code>（茅台）、<code>SZ:000001</code>（平安银行）</p>
-<p><strong>实时行情：</strong> 最新价、涨跌幅、今开、最高、最低、成交量，通过 WebSocket 推送。</p>
+<h3>自选股 + 实时行情</h3>
+<p>添加/删除自选股。港股 <code>HK:0700</code>、A 股 <code>SH:600519</code>、<code>SZ:000001</code>。实时行情通过 WebSocket 推送。</p>
 
 <h3>K 线图</h3>
 <ul>
-  <li>支持时间周期：<strong>5 分钟、日 K、周 K、月 K</strong></li>
-  <li>均线周期自适应，叠加买卖信号标记</li>
-  <li>支持缩放、十字光标</li>
+  <li>时间周期：5 分钟、日 K、周 K、月 K</li>
+  <li>均线周期自适应，买卖信号标记，北京时间显示</li>
 </ul>
 
-<h3>卖出分析</h3>
-<p>基于日 K 数据，8 项技术指标加权评分。满分 13 分。</p>
+<h3>技术分析</h3>
+<ul>
+  <li>8 项卖出信号 + 10 项买入信号，加权评分</li>
+  <li>按交易所筛选、按信号/名称排序</li>
+</ul>
 
-<table>
-  <tr><th>信号</th><th>权重</th><th>说明</th></tr>
-  <tr><td>RSI 顶背离</td><td>2.5</td><td>价格创新高，RSI 未创新高</td></tr>
-  <tr><td>MACD 顶背离</td><td>2.5</td><td>价格创新高，DIF 未创新高</td></tr>
-  <tr><td>MA5 死叉 MA20</td><td>2.0</td><td>短期均线下穿中期均线</td></tr>
-  <tr><td>MACD 死叉</td><td>2.0</td><td>DIF 下穿 DEA</td></tr>
-  <tr><td>成交量死叉</td><td>1.5</td><td>下跌放量 &gt; 上涨放量</td></tr>
-  <tr><td>收盘 &lt; MA20</td><td>1.0</td><td>价格处于中期均线下方</td></tr>
-  <tr><td>RSI 超买</td><td>1.0</td><td>RSI(14) &gt; 70</td></tr>
-  <tr><td>收盘 &lt; MA60</td><td>0.5</td><td>价格处于长期均线下方</td></tr>
-</table>
-
-<table>
-  <tr><th>卖出指数</th><th>含义</th></tr>
-  <tr><td style="color:#d00">≥ 50%</td><td>强烈卖出信号</td></tr>
-  <tr><td style="color:#c90">25–49%</td><td>偏弱，注意观察</td></tr>
-  <tr><td style="color:#0a0">&lt; 25%</td><td>暂无明确卖出信号</td></tr>
-</table>
-
-<h3>持仓管理</h3>
-<p>记录持股数量、成本价，实时计算盈亏。顶部汇总总投入、总市值、总盈亏。</p>
-
-<h3>价格预警</h3>
-<p>涨破/跌破/涨跌幅达阈值时触发 Toast 通知。同一规则 30 分钟内不重复。</p>
+<h3>AI 策略分析</h3>
+<ul>
+  <li>17 种策略：均线金叉、趋势跟踪、放量突破、缠论、波浪理论等</li>
+  <li><strong>综合分析</strong>：并行运行全部策略，聚合输出多空对比、共识分歧、1-10 评分、操作建议</li>
+  <li>盘中 2 分钟缓存，盘后 24 小时缓存</li>
+  <li>Markdown 渲染，时间戳自动转北京时间</li>
+</ul>
 
 <h3>AI 荐股</h3>
-<ul>
-  <li>输入行业关键词，DeepSeek 大模型推荐相关股票</li>
-  <li>自动跳过已自选的股票</li>
-  <li>四因子排序：相关性 + 可交易 + 涨跌动量 + 成交量热度</li>
-  <li>最多返回 8 只，结果缓存 30 分钟</li>
-</ul>
+<p>输入行业关键词，DeepSeek 推荐相关股票。自动去重、四因子排序。结果缓存 30 分钟。</p>
 
-<h3>连接状态</h3>
-<ul>
-  <li>绿色 <code>已连接</code> — 正常接收实时行情</li>
-  <li>黄色 <code>连接中...</code> — 正在连接</li>
-  <li>红色 <code>已断开</code> — 自动重连中</li>
-</ul>
-
-<hr>
-
-<h2>数据存储</h2>
-<p>所有数据存储在 <code>data/stock-monitor.db</code>（SQLite 单文件），仅本地保存。</p>
+<h3>持仓管理 + 价格预警</h3>
+<p>记录持股、实时盈亏计算。涨破/跌破/涨跌幅预警，WebSocket 推送通知。</p>
 
 <hr>
 
@@ -149,32 +84,24 @@ DEEPSEEK_API_KEY=sk-xxx    # 可选，启用 AI 荐股</code></pre>
 <table>
   <tr><th>层</th><th>技术</th></tr>
   <tr><td>后端</td><td>Go + Gin + SQLite</td></tr>
-  <tr><td>前端</td><td>原生 HTML/CSS/JS，无框架</td></tr>
-  <tr><td>K 线图</td><td>TradingView Lightweight Charts v4（CDN）</td></tr>
-  <tr><td>实时推送</td><td>WebSocket（服务器 ↔ 浏览器）</td></tr>
+  <tr><td>Web 前端</td><td>原生 HTML/CSS/JS，无框架</td></tr>
+  <tr><td>移动端</td><td>Flutter + Riverpod</td></tr>
+  <tr><td>K 线图</td><td>TradingView Lightweight Charts v4</td></tr>
+  <tr><td>实时推送</td><td>WebSocket</td></tr>
   <tr><td>行情数据</td><td>免费公开接口</td></tr>
-  <tr><td>AI 荐股</td><td>DeepSeek API（OpenAI 兼容）</td></tr>
-  <tr><td>认证</td><td>JWT</td></tr>
+  <tr><td>AI</td><td>DeepSeek API</td></tr>
 </table>
-
-<p>默认端口 3000，可通过 <code>.env</code> 修改。</p>
 
 <hr>
 
 <h2>常见问题</h2>
-
 <dl>
-  <dt><strong>Q: 为什么看不到实时价格？</strong></dt>
-  <dd>A: 检查右上角连接状态是否为绿色。如果是红色，检查后端是否正常运行。</dd>
-
-  <dt><strong>Q: 休市时间有数据吗？</strong></dt>
-  <dd>A: 休市期间显示上一交易日收盘价。</dd>
-
+  <dt><strong>Q: 行情数据要付费吗？</strong></dt>
+  <dd>A: 不需要，全部使用免费公开数据接口。</dd>
+  <dt><strong>Q: AI 功能需要什么？</strong></dt>
+  <dd>A: 配置 <code>DEEPSEEK_API_KEY</code>，在 DeepSeek 平台注册获取。</dd>
   <dt><strong>Q: 数据会丢失吗？</strong></dt>
   <dd>A: 数据存储在 SQLite 中，正常关闭不会丢失。</dd>
-
-  <dt><strong>Q: AI 荐股需要什么？</strong></dt>
-  <dd>A: 需要配置 <code>DEEPSEEK_API_KEY</code>，在 <a href="https://platform.deepseek.com">DeepSeek 平台</a> 注册获取。</dd>
 </dl>
 
 </body>
