@@ -328,7 +328,7 @@ class AnalysisComponent {
 
     // Strategy analysis (right column)
     html += '<div style="flex:1.2;min-width:0;">';
-    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
+    html += '<select id="strategySelect" style="width:100%;padding:4px 8px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:13px;margin-bottom:4px;">';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
@@ -525,7 +525,7 @@ class AnalysisComponent {
 
     // Strategy analysis (right column)
     html += '<div style="flex:1.2;min-width:0;">';
-    html += '<select id="strategySelect" style="width:100%;padding:2px 6px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:12px;margin-bottom:4px;">';
+    html += '<select id="strategySelect" style="width:100%;padding:4px 8px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:13px;margin-bottom:4px;">';
     for (let i = 0; i < (this._strategies || []).length; i++) {
       const key = this._strategies[i];
       const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
