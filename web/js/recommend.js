@@ -2,7 +2,18 @@ class RecommendComponent {
   constructor(api, onAddToWatchlist) {
     this.api = api;
     this.onAddToWatchlist = onAddToWatchlist;
-    this.signals = new Map(); // symbol -> { buySignals, sellSignals }
+    this.signals = new Map(); // symbol -> { buySignals, sellSignals, bars }
+    this._strategies = [];
+    this._displayNames = [];
+    this._loadStrategies();
+  }
+
+  async _loadStrategies() {
+    try {
+      const resp = await this.api.get('/api/strategy/list');
+      this._strategies = (resp && resp.strategies) ? resp.strategies : [];
+      this._displayNames = (resp && resp.displayNames) ? resp.displayNames : [];
+    } catch (_) {}
   }
 
   async search(industry) {
@@ -47,7 +58,7 @@ class RecommendComponent {
         const macd = calcMACD(bars);
         const buySignals = evaluateBuySignals(bars, { ma5, ma20, ma60 }, rsi, macd);
         const sellSignals = evaluateSignals(bars, { ma5, ma20, ma60 }, rsi, macd);
-        this.signals.set(r.symbol, { buySignals, sellSignals });
+        this.signals.set(r.symbol, { buySignals, sellSignals, bars });
       } catch (_) {}
     });
     await Promise.all(promises);
@@ -201,6 +212,20 @@ class RecommendComponent {
     }
     html += '</tbody></table>';
 
+    // AI Strategy analysis
+    html += '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #30363d;">';
+    html += '<select id="recStrategySelect" style="width:100%;padding:4px 8px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:14px;margin-bottom:6px;">';
+    html += '<option value="comprehensive">综合分析</option>';
+    for (let i = 0; i < (this._strategies || []).length; i++) {
+      const key = this._strategies[i];
+      if (key === 'comprehensive') continue;
+      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
+      html += '<option value="' + key + '">' + label + '</option>';
+    }
+    html += '</select>';
+    html += '<div id="recStrategyResult" style="color:#c9d1d9;line-height:1.3;white-space:pre-wrap;font-size:12px;"></div>';
+    html += '</div>';
+
     html += '</div></div>';
 
     // Remove existing modal if any
@@ -215,5 +240,37 @@ class RecommendComponent {
     document.getElementById('recDetailOverlay').addEventListener('click', (e) => {
       if (e.target.id === 'recDetailOverlay') document.getElementById('recDetailOverlay').remove();
     });
+
+    // Strategy analysis
+    const self = this;
+    const bars = sig.bars;
+    const formatMd = (text) => {
+      return escapeHtml(text)
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
+        .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
+          const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
+          const pad2 = n => String(n).padStart(2, '0');
+          return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate()) + ' ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes());
+        })
+        .replace(/\n/g, '<br>');
+    };
+    const runStrategy = (strategy) => {
+      const el = document.getElementById('recStrategyResult');
+      if (!el) return;
+      el.innerHTML = '分析中...';
+      const barData = (bars || []).map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
+      self.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
+        el.innerHTML = formatMd(resp.analysis || '无分析结果');
+      }).catch(e => {
+        el.innerHTML = '失败: ' + e.message;
+      });
+    };
+    document.getElementById('recStrategySelect').addEventListener('change', function() {
+      runStrategy(this.value);
+    });
+    runStrategy('comprehensive');
   }
 }
