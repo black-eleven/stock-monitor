@@ -126,8 +126,9 @@ class RecommendComponent {
     // Bind signal detail clicks
     const self = this;
     container.querySelectorAll('.rec-signal-row').forEach(row => {
-      row.addEventListener('click', function() {
+      row.addEventListener('click', async function() {
         const symbol = this.dataset.symbol;
+        if (self._strategies.length === 0) await self._loadStrategies();
         self._showDetailModal(symbol);
       });
     });
@@ -180,7 +181,7 @@ class RecommendComponent {
     const sellColor = sellPct >= 50 ? '#f85149' : sellPct >= 25 ? '#d29922' : '#8b949e';
 
     let html = '<div class="rec-detail-overlay" id="recDetailOverlay">';
-    html += '<div class="rec-detail-modal">';
+    html += '<div class="rec-detail-modal" style="max-height:85vh;overflow-y:auto;">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
     html += '<h3 style="margin:0;">' + escapeHtml(name) + ' <span style="font-weight:normal;font-size:14px;color:#8b949e;">' + escapeHtml(shortCode(symbol)) + '</span></h3>';
     html += '<button id="recDetailClose" style="background:none;border:none;color:#8b949e;font-size:24px;cursor:pointer;">&times;</button>';
