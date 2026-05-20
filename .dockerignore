@@ -6,6 +6,7 @@ mobile
 node_modules
 .env
 *.md
+.env
 CLAUDE.md
 README.html
 docs
