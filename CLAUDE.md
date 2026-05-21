@@ -76,5 +76,5 @@ Strategy API → llm.Chat → DeepSeek → cached (2min/24h)
 - **Strategy cache**: 2min during trading hours, 24h otherwise
 - **JWT auth** with admin/normal roles, invite-code-based registration
 - **SQLite** single-file database, auto-migrated on startup
-- Quotes: SH/SZ/HK from Sina; K-lines: SH/SZ from Sina, HK from Yahoo fallback
+- Quotes: SH/SZ/HK from Sina; K-lines: SH/SZ from Sina, HK from Sina with Eastmoney fallback
 - **Flutter mobile** shares same backend API

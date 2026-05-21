@@ -57,8 +57,8 @@ func ktToSinaScale(kt int) int {
 	}
 }
 
-// toYahooSymbol converts market:code symbol to Yahoo Finance format (0700.HK, 600519.SS, 000001.SZ).
-func toYahooSymbol(qosSymbol string) (string, error) {
+// toEastmoneySecID converts market:code symbol to Eastmoney secid format (116.00700 for HK).
+func toEastmoneySecID(qosSymbol string) (string, error) {
 	parts := strings.SplitN(qosSymbol, ":", 2)
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid symbol format: %s", qosSymbol)
@@ -67,17 +67,39 @@ func toYahooSymbol(qosSymbol string) (string, error) {
 	code := strings.ToUpper(parts[1])
 
 	switch market {
-	case "SH":
-		return code + ".SS", nil
-	case "SZ":
-		return code + ".SZ", nil
 	case "HK":
-		// Yahoo requires 4-digit HK codes: 0700.HK not 700.HK
-		for len(code) < 4 {
+		for len(code) < 5 {
 			code = "0" + code
 		}
-		return code + ".HK", nil
+		return "116." + code, nil
 	default:
-		return "", fmt.Errorf("unsupported market: %s", market)
+		return "", fmt.Errorf("eastmoney: unsupported market %s", market)
+	}
+}
+
+// ktToEastmoneyKlt converts K-line type to Eastmoney klt parameter.
+// 1=1min, 5=5min, 15=15min, 30=30min, 60=60min, 101=daily, 102=weekly, 103=monthly.
+func ktToEastmoneyKlt(kt int) int {
+	switch kt {
+	case 1:
+		return 1
+	case 5:
+		return 5
+	case 15:
+		return 15
+	case 30:
+		return 30
+	case 60:
+		return 60
+	case 120, 240:
+		return 60 // no 120/240min in Eastmoney, fall back to 60min
+	case 1001:
+		return 101
+	case 1007:
+		return 102
+	case 1030:
+		return 103
+	default:
+		return 101
 	}
 }

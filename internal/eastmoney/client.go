@@ -211,7 +211,7 @@ func (c *Client) FetchQuote(code string) (*Quote, error) {
 	return nil, fmt.Errorf("no quote data for %s", code)
 }
 
-// ---- K-line: Sina (SH/SZ) + Yahoo (HK fallback) ----
+// ---- K-line: Sina (SH/SZ) + Eastmoney (HK fallback) ----
 
 func (c *Client) FetchHistoryKline(code string, kt int, count int) ([]json.RawMessage, error) {
 	data, err := c.fetchSinaKline(code, kt, count)
@@ -219,8 +219,8 @@ func (c *Client) FetchHistoryKline(code string, kt int, count int) ([]json.RawMe
 		return data, nil
 	}
 	if strings.HasPrefix(code, "HK:") {
-		log.Printf("[KLINE] Sina failed for %s, falling back to Yahoo", code)
-		return c.fetchYahooKline(code, kt, count)
+		log.Printf("[KLINE] Sina failed for %s, falling back to Eastmoney", code)
+		return c.fetchEastmoneyKline(code, kt, count)
 	}
 	return data, err
 }
@@ -279,119 +279,71 @@ func parseSinaKline(body []byte) ([]json.RawMessage, error) {
 	return bars, nil
 }
 
-// ---- Yahoo Finance kline (HK fallback) ----
+// ---- Eastmoney kline (HK fallback) ----
 
-func (c *Client) fetchYahooKline(code string, kt int, count int) ([]json.RawMessage, error) {
-	symbol, err := toYahooSymbol(code)
+func (c *Client) fetchEastmoneyKline(code string, kt int, count int) ([]json.RawMessage, error) {
+	secid, err := toEastmoneySecID(code)
 	if err != nil {
 		return nil, err
 	}
-	interval, yrange := yahooParams(kt, count)
-	url := fmt.Sprintf("https://query1.finance.yahoo.com/v8/finance/chart/%s?range=%s&interval=%s",
-		symbol, yrange, interval)
-	log.Printf("[YAHOO] %s", url)
+
+	klt := ktToEastmoneyKlt(kt)
+	fqt := 0
+	if kt >= 1001 {
+		fqt = 1 // 前复权 for daily/weekly/monthly
+	}
+	url := fmt.Sprintf(
+		"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=%s&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56&klt=%d&fqt=%d&end=20500101&lmt=%d",
+		secid, klt, fqt, count,
+	)
+	log.Printf("[EASTMONEY] %s", url)
 
 	resp, err := c.doGetWithUA(url)
 	if err != nil {
-		return nil, fmt.Errorf("yahoo kline: %w", err)
+		return nil, fmt.Errorf("eastmoney kline: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("yahoo kline HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("eastmoney kline HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("yahoo kline read: %w", err)
+		return nil, fmt.Errorf("eastmoney kline read: %w", err)
 	}
-	return parseYahooKline(body)
+	return parseEastmoneyKline(body)
 }
 
-func yahooParams(kt int, count int) (interval, yrange string) {
-	switch {
-	case kt == 1:
-		return "1m", "5d"
-	case kt == 5:
-		return "5m", "5d"
-	case kt == 15:
-		return "15m", "5d"
-	case kt == 30:
-		return "30m", "5d"
-	case kt == 60:
-		return "60m", "5d"
-	case kt == 120 || kt == 240:
-		return "1h", "10d"
-	case kt == 1001:
-		days := count * 2
-		if days < 5 {
-			days = 5
-		}
-		if days <= 30 {
-			return "1d", "1mo"
-		}
-		if days <= 90 {
-			return "1d", "3mo"
-		}
-		if days <= 180 {
-			return "1d", "6mo"
-		}
-		if days <= 365 {
-			return "1d", "1y"
-		}
-		return "1d", "2y"
-	case kt == 1007:
-		return "1wk", "6mo"
-	case kt == 1030:
-		return "1mo", "2y"
-	default:
-		return "1d", "1mo"
-	}
-}
-
-func parseYahooKline(body []byte) ([]json.RawMessage, error) {
+func parseEastmoneyKline(body []byte) ([]json.RawMessage, error) {
 	var resp struct {
-		Chart struct {
-			Result []struct {
-				Timestamp  []int64 `json:"timestamp"`
-				Indicators struct {
-					Quote []struct {
-						Open   []float64 `json:"open"`
-						High   []float64 `json:"high"`
-						Low    []float64 `json:"low"`
-						Close  []float64 `json:"close"`
-						Volume []float64 `json:"volume"`
-					} `json:"quote"`
-				} `json:"indicators"`
-			} `json:"result"`
-		} `json:"chart"`
+		Data struct {
+			Klines []string `json:"klines"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, fmt.Errorf("yahoo kline parse: %w", err)
+		return nil, fmt.Errorf("eastmoney kline parse: %w", err)
 	}
-	if len(resp.Chart.Result) == 0 || len(resp.Chart.Result[0].Indicators.Quote) == 0 {
-		return nil, fmt.Errorf("yahoo: no data")
-	}
-
-	q := resp.Chart.Result[0]
-	timestamps := q.Timestamp
-	quote := q.Indicators.Quote[0]
-	if len(timestamps) == 0 || len(quote.Open) == 0 {
-		return nil, fmt.Errorf("yahoo: empty series")
+	if len(resp.Data.Klines) == 0 {
+		return nil, fmt.Errorf("eastmoney: no data")
 	}
 
-	bars := make([]json.RawMessage, 0, len(timestamps))
-	for i, ts := range timestamps {
-		if i >= len(quote.Open) {
-			break
+	bars := make([]json.RawMessage, 0, len(resp.Data.Klines))
+	for _, line := range resp.Data.Klines {
+		// f51=date, f52=open, f53=close, f54=high, f55=low, f56=volume
+		fields := strings.Split(line, ",")
+		if len(fields) < 6 {
+			continue
 		}
-			if quote.Close[i] == 0 && quote.Open[i] == 0 && quote.High[i] == 0 && quote.Low[i] == 0 {
-				continue
-			}
+		ts := parseDateToUnix(fields[0])
 		bar := map[string]interface{}{
-			"ts": ts, "o": quote.Open[i], "cl": quote.Close[i],
-			"h": quote.High[i], "l": quote.Low[i], "v": quote.Volume[i],
+			"ts": ts,
+			"o":  parseFloatStr(fields[1]),
+			"cl": parseFloatStr(fields[2]),
+			"h":  parseFloatStr(fields[3]),
+			"l":  parseFloatStr(fields[4]),
+			"v":  parseFloatStr(fields[5]),
 		}
 		data, _ := json.Marshal(bar)
 		bars = append(bars, json.RawMessage(data))
@@ -402,14 +354,13 @@ func parseYahooKline(body []byte) ([]json.RawMessage, error) {
 // ---- Helpers ----
 
 func parseDateToUnix(dateStr string) int64 {
-	t, err := time.Parse("2006-01-02", dateStr)
-	if err != nil {
-		t, err = time.Parse("20060102", dateStr)
-		if err != nil {
-			return 0
+	layouts := []string{"2006-01-02 15:04", "2006-01-02", "20060102"}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, dateStr); err == nil {
+			return t.Unix()
 		}
 	}
-	return t.Unix()
+	return 0
 }
 
 func parseFloatStr(s string) float64 {
