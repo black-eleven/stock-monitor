@@ -10,15 +10,17 @@ import (
 )
 
 type Config struct {
-	Port                 string
-	DataDir              string
-	JwtSecret            string
-	AdminPassword        string
+	Port                  string
+	DataDir               string
+	Env                   string
+	JwtSecret             string
+	AdminPassword         string
 	ExplicitAdminPassword bool
-	DeepSeekAPIKey       string
-	DeepSeekModel        string
-	LLMCacheTTL          int
-	RecommendLimit       int
+	DeepSeekAPIKey        string
+	DeepSeekModel         string
+	DeepSeekBaseURL       string
+	LLMCacheTTL           int
+	RecommendLimit        int
 }
 
 func Load() *Config {
@@ -31,6 +33,11 @@ func Load() *Config {
 		dataDir = "data"
 	}
 	absDataDir, _ := filepath.Abs(dataDir)
+
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "mainland"
+	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
@@ -52,6 +59,10 @@ func Load() *Config {
 	if deepSeekModel == "" {
 		deepSeekModel = "deepseek-chat"
 	}
+	deepSeekBaseURL := os.Getenv("DEEPSEEK_BASE_URL")
+	if deepSeekBaseURL == "" {
+		deepSeekBaseURL = "https://api.deepseek.com/v1/chat/completions"
+	}
 	llmCacheTTL := 30
 	if s := os.Getenv("LLM_CACHE_TTL"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
@@ -66,15 +77,17 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Port:                 port,
-		DataDir:              absDataDir,
-		JwtSecret:            jwtSecret,
-		AdminPassword:        adminPassword,
+		Port:                  port,
+		DataDir:               absDataDir,
+		Env:                   env,
+		JwtSecret:             jwtSecret,
+		AdminPassword:         adminPassword,
 		ExplicitAdminPassword: explicitAdminPassword,
-		DeepSeekAPIKey:       deepSeekAPIKey,
-		DeepSeekModel:        deepSeekModel,
-		LLMCacheTTL:          llmCacheTTL,
-		RecommendLimit:       recommendLimit,
+		DeepSeekAPIKey:        deepSeekAPIKey,
+		DeepSeekModel:         deepSeekModel,
+		DeepSeekBaseURL:       deepSeekBaseURL,
+		LLMCacheTTL:           llmCacheTTL,
+		RecommendLimit:        recommendLimit,
 	}
 }
 
