@@ -22,15 +22,18 @@ type Client struct {
 	baseURL    string
 }
 
-func NewClient(apiKey, model string) *Client {
+func NewClient(apiKey, model, baseURL string) *Client {
 	if model == "" {
 		model = "deepseek-chat"
+	}
+	if baseURL == "" {
+		baseURL = "https://api.deepseek.com/v1/chat/completions"
 	}
 	return &Client{
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		apiKey:     apiKey,
 		model:      model,
-		baseURL:    "https://api.deepseek.com/v1/chat/completions",
+		baseURL:    baseURL,
 	}
 }
 

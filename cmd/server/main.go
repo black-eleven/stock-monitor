@@ -54,7 +54,7 @@ func main() {
 	}
 
 	// EastMoney Client
-	emClient := eastmoney.NewClient()
+	emClient := eastmoney.NewClient(cfg.Env)
 
 	// Alert Engine
 	alertEngine := alert.NewEngine(alertRepo, hub)
@@ -69,7 +69,7 @@ func main() {
 	// LLM Client (shared by recommender + strategy)
 	var llmClient *llm.Client
 	if cfg.DeepSeekAPIKey != "" {
-		llmClient = llm.NewClient(cfg.DeepSeekAPIKey, cfg.DeepSeekModel)
+		llmClient = llm.NewClient(cfg.DeepSeekAPIKey, cfg.DeepSeekModel, cfg.DeepSeekBaseURL)
 	}
 
 	// Recommender

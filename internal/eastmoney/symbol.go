@@ -67,6 +67,10 @@ func toEastmoneySecID(qosSymbol string) (string, error) {
 	code := strings.ToUpper(parts[1])
 
 	switch market {
+	case "SH":
+		return "1." + code, nil
+	case "SZ":
+		return "0." + code, nil
 	case "HK":
 		for len(code) < 5 {
 			code = "0" + code
