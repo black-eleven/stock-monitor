@@ -100,7 +100,7 @@ class HoldingsComponent {
       alertsHtml += `<button class="btn btn-sm" data-add-alert="${escapeHtml(h.symbol)}" style="font-size:11px;padding:2px 6px;margin-top:2px;" title="添加预警">+</button>`;
 
       return `<tr>
-        <td>${escapeHtml(h.name)}<br><small style="color:#8b949e">${escapeHtml(shortCode(h.symbol))}</small></td>
+        <td><a href="?stock=${escapeHtml(h.symbol)}" style="color:#e6edf3;text-decoration:none;" onclick="event.preventDefault();navigateToStock('${escapeHtml(h.symbol)}')">${escapeHtml(h.name)}</a><br><small style="color:#8b949e">${escapeHtml(shortCode(h.symbol))}</small></td>
         <td>${h.shares}</td>
         <td>${formatPrice(h.avgCost)}</td>
         <td class="${hasPrice ? dir : ''}">${priceDisplay}</td>

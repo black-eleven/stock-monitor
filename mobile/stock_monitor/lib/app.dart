@@ -4,11 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'core/theme.dart';
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/screens/login_screen.dart';
+import 'presentation/screens/dashboard_screen.dart';
 import 'presentation/screens/watchlist_screen.dart';
-import 'presentation/screens/kline_screen.dart';
 import 'presentation/screens/holdings_screen.dart';
-import 'presentation/screens/alerts_screen.dart';
-import 'presentation/screens/analysis_screen.dart';
+import 'presentation/screens/stock_detail_screen.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -18,13 +17,13 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/watchlist',
+    initialLocation: '/dashboard',
     redirect: (context, state) {
       final isLoggedIn = authState.isLoggedIn;
       final isLoginRoute = state.uri.path == '/login';
 
       if (!isLoggedIn && !isLoginRoute) return '/login';
-      if (isLoggedIn && isLoginRoute) return '/watchlist';
+      if (isLoggedIn && isLoginRoute) return '/dashboard';
       return null;
     },
     routes: [
@@ -33,12 +32,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) => AppShell(child: child),
         routes: [
+          GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
           GoRoute(path: '/watchlist', builder: (_, __) => const WatchlistScreen()),
-          GoRoute(path: '/kline', builder: (_, __) => const KlineScreen()),
           GoRoute(path: '/holdings', builder: (_, __) => const HoldingsScreen()),
-          GoRoute(path: '/alerts', builder: (_, __) => const AlertsScreen()),
-          GoRoute(path: '/analysis', builder: (_, __) => const AnalysisScreen()),
         ],
+      ),
+      GoRoute(
+        path: '/stock-detail',
+        builder: (_, state) {
+          final symbol = (state.extra as Map<String, dynamic>?)?['symbol'] as String? ?? '';
+          return StockDetailScreen(symbol: symbol);
+        },
       ),
     ],
   );
@@ -57,11 +61,9 @@ class AppShell extends StatelessWidget {
         onTap: (i) => _onTap(context, i),
         type: BottomNavigationBarType.fixed,
         items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: '仪表盘'),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: '自选'),
-          BottomNavigationBarItem(icon: Icon(Icons.show_chart), label: 'K线'),
           BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: '持仓'),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications), label: '提醒'),
-          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: '分析'),
         ],
       ),
     );
@@ -69,15 +71,13 @@ class AppShell extends StatelessWidget {
 
   int _calculateSelectedIndex(BuildContext context) {
     final loc = GoRouterState.of(context).uri.path;
-    if (loc.startsWith('/kline')) return 1;
+    if (loc.startsWith('/watchlist')) return 1;
     if (loc.startsWith('/holdings')) return 2;
-    if (loc.startsWith('/alerts')) return 3;
-    if (loc.startsWith('/analysis')) return 4;
     return 0;
   }
 
   void _onTap(BuildContext context, int i) {
-    final routes = ['/watchlist', '/kline', '/holdings', '/alerts', '/analysis'];
+    final routes = ['/dashboard', '/watchlist', '/holdings'];
     context.go(routes[i]);
   }
 }

@@ -132,6 +132,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .dash-list-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #21262d; font-size: 14px; }
 .dash-list-item:last-child { border-bottom: none; }
 .dash-list-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.dash-list-name { color: #e6edf3; text-decoration: none; }
+a.dash-list-name:hover { color: #58a6ff; text-decoration: underline; }
 .dash-list-code { color: #484f58; font-size: 12px; margin-left: 6px; flex-shrink: 0; }
 .dash-list-price { margin-left: auto; margin-right: 8px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .dash-list-change { font-weight: 600; font-variant-numeric: tabular-nums; }

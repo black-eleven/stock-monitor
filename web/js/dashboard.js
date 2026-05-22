@@ -153,7 +153,7 @@ class DashboardComponent {
       const sign = item.changePct >= 0 ? '+' : '';
       const name = item.name || this._resolveName(item.symbol);
       return `<div class="dash-list-item">
-        <span class="dash-list-name">${escapeHtml(name)}</span>
+        <a href="?stock=${escapeHtml(item.symbol)}" class="dash-list-name" onclick="event.preventDefault();navigateToStock('${escapeHtml(item.symbol)}')">${escapeHtml(name)}</a>
         <span class="dash-list-code">${escapeHtml(shortCode(item.symbol))}</span>
         <span class="dash-list-price">${formatPrice(item.price)}</span>
         <span class="dash-list-change ${dir}">${sign}${item.changePct.toFixed(2)}%</span>
@@ -175,7 +175,7 @@ class DashboardComponent {
       else if (pct >= 25) cls = 'dash-signal-watch';
       const name = s.name || this._resolveName(s.symbol);
       return `<div class="dash-list-item">
-        <span class="dash-list-name">${escapeHtml(name)}</span>
+        <a href="?stock=${escapeHtml(s.symbol)}" class="dash-list-name" onclick="event.preventDefault();navigateToStock('${escapeHtml(s.symbol)}')">${escapeHtml(name)}</a>
         <span class="dash-list-code">${escapeHtml(shortCode(s.symbol))}</span>
         <span class="dash-signal-badge ${cls}">买入 ${pct}%</span>
       </div>`;
@@ -194,7 +194,7 @@ class DashboardComponent {
       const msg = a.message || `${a.type === 'above' ? '涨破' : a.type === 'below' ? '跌破' : '触发'} ${a.value || ''}`;
       const name = a.name || this._resolveName(a.symbol);
       return `<div class="dash-list-item">
-        <span class="dash-list-name">${escapeHtml(name)}</span>
+        <a href="?stock=${escapeHtml(a.symbol)}" class="dash-list-name" onclick="event.preventDefault();navigateToStock('${escapeHtml(a.symbol)}')">${escapeHtml(name)}</a>
         <span class="dash-list-code">${escapeHtml(shortCode(a.symbol))}</span>
         <span class="dash-alert-msg">${escapeHtml(msg)}</span>
         <span class="dash-alert-time">${time}</span>

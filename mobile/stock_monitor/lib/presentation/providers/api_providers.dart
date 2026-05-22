@@ -9,6 +9,7 @@ import '../../data/ws/ws_client.dart';
 import '../../data/api/recommend_api.dart';
 import '../../data/api/strategy_api.dart';
 import '../../data/api/signal_api.dart';
+import '../../data/api/dashboard_api.dart';
 
 final apiClientProvider = Provider((ref) => ApiClient());
 final watchlistApiProvider = Provider((ref) => WatchlistApi(ref.watch(apiClientProvider)));
@@ -18,6 +19,7 @@ final quoteApiProvider = Provider((ref) => QuoteApi(ref.watch(apiClientProvider)
 final recommendApiProvider = Provider((ref) => RecommendApi(ref.watch(apiClientProvider)));
 final strategyApiProvider = Provider((ref) => StrategyApi(ref.watch(apiClientProvider)));
 final signalApiProvider = Provider((ref) => SignalApi(ref.watch(apiClientProvider)));
+final dashboardApiProvider = Provider((ref) => DashboardApi(ref.watch(apiClientProvider)));
 
 final wsClientProvider = Provider<WsClient>((ref) {
   final ws = WsClient();

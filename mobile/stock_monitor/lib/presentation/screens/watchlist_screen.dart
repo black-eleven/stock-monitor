@@ -53,18 +53,11 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
 
     final futures = items.map((item) async {
       try {
-        final data =
-            await quoteApi.getKline(item.symbol, interval: '1d', count: 100);
+        final data = await quoteApi.getKline(item.symbol, interval: '1d', count: 100);
         final bars = <Bar>[];
         for (final item in data) {
           for (final k in item.k) {
-            bars.add(Bar(
-                time: k.ts,
-                open: k.o,
-                high: k.h,
-                low: k.l,
-                close: k.cl,
-                volume: k.v));
+            bars.add(Bar(time: k.ts, open: k.o, high: k.h, low: k.l, close: k.cl, volume: k.v));
           }
         }
         bars.sort((a, b) => a.time.compareTo(b.time));
@@ -112,26 +105,8 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
     }
   }
 
-  void _showDetail(WatchlistItem item) {
-    final quote = ref.read(quoteProvider).quotes[item.symbol];
-    if (quote == null) return;
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => StockDetailSheet(
-        item: item,
-        quote: quote,
-        buySignal: _buySignals?[item.symbol],
-        sellSignal: _sellSignals?[item.symbol],
-        onDelete: () async {
-          await ref.read(watchlistApiProvider).remove(item.symbol);
-          _load();
-        },
-      ),
-    );
-  }
-
-  void _openKline(String symbol) {
-    Navigator.of(context).pushNamed('/kline', arguments: {'symbol': symbol});
+  void _openStockDetail(String symbol) {
+    Navigator.of(context).pushNamed('/stock-detail', arguments: {'symbol': symbol});
   }
 
   @override
@@ -180,7 +155,7 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           quote: quotes[item.symbol],
           buySignal: _buySignals?[item.symbol],
           sellSignal: _sellSignals?[item.symbol],
-          onTap: () => _showDetail(item),
+          onTap: () => _openStockDetail(item.symbol),
           onDelete: () async {
             await ref.read(watchlistApiProvider).remove(item.symbol);
             _load();
@@ -210,16 +185,16 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
           }
         }
       },
-      onOpenKline: _openKline,
+      onOpenDetail: _openStockDetail,
     );
   }
 }
 
 class _RecommendTab extends StatefulWidget {
   final Future<void> Function(String symbol, String name) onAddToWatchlist;
-  final void Function(String symbol) onOpenKline;
+  final void Function(String symbol) onOpenDetail;
 
-  const _RecommendTab({required this.onAddToWatchlist, required this.onOpenKline});
+  const _RecommendTab({required this.onAddToWatchlist, required this.onOpenDetail});
 
   @override
   State<_RecommendTab> createState() => _RecommendTabState();
@@ -257,19 +232,12 @@ class _RecommendTabState extends State<_RecommendTab> {
       final recs = await api.recommend(industry);
       setState(() {
         _recs = recs;
-        if (recs.isEmpty) {
-          _error = '未找到相关推荐';
-        }
+        if (recs.isEmpty) _error = '未找到相关推荐';
       });
-      if (recs.isNotEmpty) {
-        await _fetchSignals(recs);
-      }
+      if (recs.isNotEmpty) await _fetchSignals(recs);
       setState(() => _loading = false);
     } catch (e) {
-      setState(() {
-        _error = '获取推荐失败: $e';
-        _loading = false;
-      });
+      setState(() { _error = '获取推荐失败: $e'; _loading = false; });
     }
   }
 
@@ -295,61 +263,49 @@ class _RecommendTabState extends State<_RecommendTab> {
     });
 
     await Future.wait(futures);
-    if (mounted) {
-      setState(() {
-        _buySignals = buySignals;
-        _sellSignals = sellSignals;
-      });
-    }
+    if (mounted) setState(() { _buySignals = buySignals; _sellSignals = sellSignals; });
   }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  decoration: const InputDecoration(
-                    hintText: '输入行业关键词 (如 AI, 新能源, 半导体)',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                  onSubmitted: (_) => _search(),
-                ),
+      child: Column(children: [
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              decoration: const InputDecoration(
+                hintText: '输入行业关键词 (如 AI, 新能源, 半导体)',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _loading ? null : _search,
-                child: _loading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('搜索'),
-              ),
-            ],
+              onSubmitted: (_) => _search(),
+            ),
           ),
-          const SizedBox(height: 16),
-          Expanded(child: _buildResults()),
-        ],
-      ),
+          const SizedBox(width: 8),
+          FilledButton(
+            onPressed: _loading ? null : _search,
+            child: _loading
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('搜索'),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        Expanded(child: _buildResults()),
+      ]),
     );
   }
 
   Widget _buildResults() {
     if (_error != null) {
-      return Center(
-        child: Text(_error!, style: const TextStyle(color: AppTheme.textSecondary)),
-      );
+      return Center(child: Text(_error!, style: const TextStyle(color: AppTheme.textSecondary)));
     }
     if (_recs == null) {
       return const Center(
         child: Text('输入行业关键词搜索推荐股票', style: TextStyle(color: AppTheme.textSecondary)),
       );
     }
-
     return ListView.builder(
       itemCount: _recs!.length,
       itemBuilder: (_, i) {
@@ -360,13 +316,12 @@ class _RecommendTabState extends State<_RecommendTab> {
           sellSignal: _sellSignals?[r.symbol],
           signalsLoading: _buySignals == null,
           onAdd: () => widget.onAddToWatchlist(r.symbol, r.name),
-          onTap: () => widget.onOpenKline(r.symbol),
+          onTap: () => widget.onOpenDetail(r.symbol),
           onDetailTap: () => _showRecommendDetail(r),
         );
       },
     );
   }
-}
 
   void _showRecommendDetail(Recommendation rec) {
     showModalBottomSheet(
@@ -412,79 +367,54 @@ class _RecommendCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.up.withAlpha(25),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text('#${rec.rank}', style: const TextStyle(fontSize: 12, color: AppTheme.up, fontWeight: FontWeight.w700)),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(rec.symbol, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: AppTheme.textPrimary)),
-                        if (rec.name.isNotEmpty && rec.name != rec.symbol)
-                          Text(rec.name, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                  ),
-                  if (rec.price > 0)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(formatPrice(rec.price), style: TextStyle(fontWeight: FontWeight.w700, color: changeColor)),
-                        Text('${rec.changePercent >= 0 ? '+' : ''}${rec.changePercent.toStringAsFixed(2)}%', style: TextStyle(fontSize: 12, color: changeColor)),
-                      ],
-                    ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline, color: AppTheme.up),
-                    onPressed: onAdd,
-                    tooltip: '加入自选',
-                  ),
-                ],
-              ),
-              if (rec.highlights.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: rec.highlights.take(2).map((h) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.textSecondary.withAlpha(20),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(h, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-                  )).toList(),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.up.withAlpha(25),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              ],
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.article_outlined, size: 14, color: AppTheme.textSecondary.withAlpha(150)),
-                  const SizedBox(width: 4),
-                  Text('${rec.newsCount} 篇相关新闻', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withAlpha(150))),
-                  const SizedBox(width: 12),
-                  Icon(Icons.auto_awesome, size: 14, color: AppTheme.textSecondary.withAlpha(150)),
-                  const SizedBox(width: 4),
-                  Text('综合评分 ${(rec.score * 100).toStringAsFixed(0)}', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withAlpha(150))),
-                ],
+                child: Text('#${rec.rank}', style: const TextStyle(fontSize: 12, color: AppTheme.up, fontWeight: FontWeight.w700)),
               ),
-              if (buySignal != null || sellSignal != null || signalsLoading) ...[
-                const SizedBox(height: 6),
-                _buildSignalRow(),
-              ],
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(rec.symbol, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: AppTheme.textPrimary)),
+                  if (rec.name.isNotEmpty && rec.name != rec.symbol)
+                    Text(rec.name, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                ]),
+              ),
+              if (rec.price > 0)
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text(formatPrice(rec.price), style: TextStyle(fontWeight: FontWeight.w700, color: changeColor)),
+                  Text('${rec.changePercent >= 0 ? '+' : ''}${rec.changePercent.toStringAsFixed(2)}%',
+                      style: TextStyle(fontSize: 12, color: changeColor)),
+                ]),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline, color: AppTheme.up),
+                onPressed: onAdd, tooltip: '加入自选',
+              ),
+            ]),
+            if (rec.highlights.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, runSpacing: 4,
+                children: rec.highlights.take(2).map((h) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.textSecondary.withAlpha(20),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(h, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                )).toList(),
+              ),
             ],
-          ),
+            if (buySignal != null || sellSignal != null || signalsLoading) ...[
+              const SizedBox(height: 6),
+              _buildSignalRow(),
+            ],
+          ]),
         ),
       ),
     );
@@ -492,18 +422,15 @@ class _RecommendCard extends StatelessWidget {
 
   Widget _buildSignalRow() {
     if (signalsLoading) {
-      return Row(
-        children: [
-          Icon(Icons.show_chart, size: 14, color: AppTheme.textSecondary.withAlpha(150)),
-          const SizedBox(width: 4),
-          Text('加载技术信号...', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withAlpha(150))),
-        ],
-      );
+      return Row(children: [
+        Icon(Icons.show_chart, size: 14, color: AppTheme.textSecondary.withAlpha(150)),
+        const SizedBox(width: 4),
+        Text('加载技术信号...', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withAlpha(150))),
+      ]);
     }
 
     final buyPct = buySignal != null ? (buySignal!.score / buySignal!.maxScore * 100) : 0.0;
     final sellPct = sellSignal != null ? (sellSignal!.score / sellSignal!.maxScore * 100) : 0.0;
-
     final hasBuy = buySignal != null && buyPct >= 25;
     final hasSell = sellSignal != null && sellPct >= 25;
 
@@ -528,15 +455,13 @@ class _RecommendCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: onDetailTap,
-      child: Row(
-        children: [
-          Icon(Icons.show_chart, size: 14, color: signalColor),
-          const SizedBox(width: 4),
-          Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: signalColor)),
-          const Spacer(),
-          Icon(Icons.chevron_right, size: 16, color: signalColor),
-        ],
-      ),
+      child: Row(children: [
+        Icon(Icons.show_chart, size: 14, color: signalColor),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: signalColor)),
+        const Spacer(),
+        Icon(Icons.chevron_right, size: 16, color: signalColor),
+      ]),
     );
   }
 }

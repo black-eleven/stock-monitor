@@ -212,6 +212,17 @@ async function initLazyComponents() {
     watchlistComp.renderDetail(watchlistComp.selectedSymbol, quote);
   }
 
+  // If URL had a stock param, navigate to it (overrides default first-stock selection)
+  if (pendingStock) {
+    const inList = watchlistComp.watchlist.find(w => w.symbol === pendingStock);
+    if (inList) {
+      watchlistComp.selectStock(pendingStock);
+    } else {
+      watchlistComp._promptAddThenSelect(pendingStock);
+    }
+    pendingStock = null;
+  }
+
   // Wire up real-time quote -> components
   api.on('snapshot', (quotes) => {
     for (const quote of quotes) {
