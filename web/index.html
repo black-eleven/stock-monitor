@@ -10,11 +10,10 @@
   <header class="app-header">
     <h1 class="app-title">📊 股票盯盘工具</h1>
     <nav class="tab-nav">
-      <button class="tab-btn active" data-tab="watchlist">自选股</button>
-      <button class="tab-btn" data-tab="kline">K线</button>
+      <button class="tab-btn active" data-tab="dashboard">仪表盘</button>
+      <button class="tab-btn" data-tab="watchlist">自选股</button>
       <button class="tab-btn" data-tab="holdings">持仓</button>
       <button class="tab-btn" data-tab="alerts">预警</button>
-      <button class="tab-btn" data-tab="analysis">分析</button>
     </nav>
     <div style="display:flex;align-items:center;">
       <span id="connStatus" class="connection-status">未连接</span>
@@ -24,8 +23,33 @@
   </header>
 
   <main class="tab-content">
+    <!-- Dashboard Tab -->
+    <section id="tab-dashboard" class="tab-pane active">
+      <div class="index-cards" id="indexCards"></div>
+      <div class="dashboard-row">
+        <div class="dashboard-card">
+          <h3 class="dashboard-card-title">今日涨幅 Top 3</h3>
+          <div id="topGainersList"></div>
+        </div>
+        <div class="dashboard-card">
+          <h3 class="dashboard-card-title">今日跌幅 Top 3</h3>
+          <div id="topLosersList"></div>
+        </div>
+      </div>
+      <div class="dashboard-row">
+        <div class="dashboard-card">
+          <h3 class="dashboard-card-title">最强买入信号</h3>
+          <div id="topSignalsList"></div>
+        </div>
+        <div class="dashboard-card">
+          <h3 class="dashboard-card-title">最近预警</h3>
+          <div id="recentAlertsList"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- Watchlist Tab -->
-    <section id="tab-watchlist" class="tab-pane active">
+    <section id="tab-watchlist" class="tab-pane">
       <div class="watchlist-header">
         <div class="watchlist-subtabs">
           <button class="subtab-btn active" data-subtab="my">我的自选</button>
@@ -39,7 +63,14 @@
         <div class="stock-detail" id="stockDetail">
           <div class="empty-state">点击上方 + 添加自选股 开始</div>
         </div>
-        <div class="chart-container" id="chartContainer"></div>
+        <div class="kline-intervals" id="watchlistKlineIntervals" style="display:none;margin-bottom:8px;">
+          <button class="interval-btn" data-kt="5m">5分</button>
+          <button class="interval-btn active" data-kt="1d">日K</button>
+          <button class="interval-btn" data-kt="1w">周K</button>
+          <button class="interval-btn" data-kt="1M">月K</button>
+        </div>
+        <div class="chart-container chart-large" id="watchlistChartContainer" style="display:none;"></div>
+        <div id="watchlistAnalysis" style="display:none;"></div>
       </div>
       <div id="watchlistRecommend" style="display:none">
         <div class="recommend-search">
@@ -49,20 +80,6 @@
         <div id="recommendStatus" class="empty-state">输入行业关键词搜索推荐股票</div>
         <div id="recommendResults"></div>
       </div>
-    </section>
-
-    <!-- Kline Tab -->
-    <section id="tab-kline" class="tab-pane">
-      <div class="symbol-selector">
-        <select id="klineSymbol"></select>
-        <div class="kline-intervals" id="klineIntervals">
-          <button class="interval-btn" data-kt="5m">5分</button>
-          <button class="interval-btn active" data-kt="1d">日K</button>
-          <button class="interval-btn" data-kt="1w">周K</button>
-          <button class="interval-btn" data-kt="1M">月K</button>
-        </div>
-      </div>
-      <div class="chart-container chart-large" id="klineChartContainer"></div>
     </section>
 
     <!-- Holdings Tab -->
@@ -119,10 +136,6 @@
       </div>
     </section>
 
-    <!-- Analysis Tab -->
-    <section id="tab-analysis" class="tab-pane">
-      <div id="analysisList"></div>
-    </section>
   </main>
 
   <div class="toast-container" id="toastContainer"></div>
@@ -140,6 +153,7 @@
   <script src="js/alerts.js"></script>
   <script src="js/indicators.js"></script>
   <script src="js/analysis.js"></script>
+  <script src="js/dashboard.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

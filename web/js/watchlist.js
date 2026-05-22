@@ -1,12 +1,13 @@
 class WatchlistComponent {
-  constructor(api, onSelectStock, onWatchlistChange) {
+  constructor(api, klineComp, analysisComp) {
     this.api = api;
-    this.onSelectStock = onSelectStock;
-    this.onWatchlistChange = onWatchlistChange;
+    this.klineComp = klineComp;
+    this.analysisComp = analysisComp;
     this.watchlist = [];
     this.quotes = {};        // code -> quote
     this.selectedSymbol = null;
     this.signalProvider = null;
+    this.onWatchlistChange = null;  // external listener (e.g. recommend component)
   }
 
   async init() {
@@ -46,6 +47,33 @@ class WatchlistComponent {
     this.renderTabs();
     const quote = this.quotes[symbol];
     this.renderDetail(symbol, quote);
+
+    // Show kline chart
+    const klineIntervals = document.getElementById('watchlistKlineIntervals');
+    const chartContainer = document.getElementById('watchlistChartContainer');
+    const analysisContainer = document.getElementById('watchlistAnalysis');
+
+    if (klineIntervals) klineIntervals.style.display = 'flex';
+    if (chartContainer) chartContainer.style.display = 'block';
+    if (analysisContainer) analysisContainer.style.display = 'block';
+
+    if (this.klineComp) {
+      this.klineComp.setSymbol(symbol);
+      setTimeout(() => this.klineComp.resize(), 300);
+    }
+
+    if (this.analysisComp) {
+      this.analysisComp.renderStockDetail(symbol, analysisContainer);
+    }
+  }
+
+  _hidePanels() {
+    const klineIntervals = document.getElementById('watchlistKlineIntervals');
+    const chartContainer = document.getElementById('watchlistChartContainer');
+    const analysisContainer = document.getElementById('watchlistAnalysis');
+    if (klineIntervals) klineIntervals.style.display = 'none';
+    if (chartContainer) chartContainer.style.display = 'none';
+    if (analysisContainer) analysisContainer.style.display = 'none';
   }
 
   renderTabs() {
@@ -62,7 +90,6 @@ class WatchlistComponent {
       const changeText = q ? (changePct >= 0 ? '+' : '') + changePct.toFixed(2) + '%' : '--';
       const active = w.symbol === this.selectedSymbol ? 'active' : '';
 
-      // Signal badge
       let signalBadge = '';
       if (this.signalProvider) {
         const sig = this.signalProvider(w.symbol);
@@ -125,10 +152,9 @@ class WatchlistComponent {
       </div>`;
     }
 
-    // Delete button always shown
+    // Delete button + signal badge
     el.insertAdjacentHTML('beforeend', '<button class="btn btn-danger btn-sm" style="margin-top:12px" id="removeStockBtn">删除自选</button>');
 
-    // Signal summary from analysis component (if available)
     if (this.signalProvider) {
       const signals = this.signalProvider(symbol);
       if (signals) {
@@ -152,15 +178,21 @@ class WatchlistComponent {
       const code = symbol;
       await this.api.removeWatchlist(code);
       this.watchlist = this.watchlist.filter(w => w.symbol !== code);
-      if (this.onWatchlistChange) this.onWatchlistChange(this.watchlist);
+      this._notifyWatchlistChange();
       if (this.watchlist.length > 0) {
         this.selectStock(this.watchlist[0].symbol);
       } else {
         this.selectedSymbol = null;
         this.renderTabs();
         el.innerHTML = '<div class="empty-state">点击上方 + 添加自选股</div>';
+        this._hidePanels();
       }
     });
+  }
+
+  _notifyWatchlistChange() {
+    if (this.klineComp) this.klineComp.updateSymbols(this.watchlist);
+    if (this.onWatchlistChange) this.onWatchlistChange(this.watchlist);
   }
 
   _showAddDialog() {
@@ -170,7 +202,7 @@ class WatchlistComponent {
     if (!name) return;
     this.api.addWatchlist(symbol.toUpperCase(), name).then(item => {
       this.watchlist.push(item);
-      if (this.onWatchlistChange) this.onWatchlistChange(this.watchlist);
+      this._notifyWatchlistChange();
       this.renderTabs();
       this.selectStock(item.symbol);
     }).catch(err => {

@@ -82,6 +82,8 @@ func main() {
 	signalRepo := repo.NewSignalRepo(database)
 	signalH := handler.NewSignalHandler(signalRepo, hub)
 
+	dashboardH := handler.NewDashboardHandler(hub, watchlistRepo, alertRepo, signalRepo)
+
 	authH := handler.NewAuthHandler(userRepo, inviteCodeRepo, cfg.JwtSecret)
 	adminH := handler.NewAdminHandler(inviteCodeRepo)
 
@@ -102,6 +104,7 @@ func main() {
 	recommendH.Register(auth)
 	signalH.Register(auth)
 	strategyH.Register(auth)
+	dashboardH.Register(auth)
 
 	// Admin routes
 	admin := auth.Group("/admin", middleware.AdminRequired())
@@ -159,6 +162,7 @@ func pollQuotes(emClient *eastmoney.Client, watchlistRepo *repo.WatchlistRepo, h
 }
 
 func syncTrackedCodes(emClient *eastmoney.Client, watchlistRepo *repo.WatchlistRepo) {
+	indexSymbols := handler.IndexSymbols()
 	for {
 		time.Sleep(30 * time.Second)
 		symbols, err := watchlistRepo.GetAllSymbols()
@@ -166,8 +170,20 @@ func syncTrackedCodes(emClient *eastmoney.Client, watchlistRepo *repo.WatchlistR
 			log.Printf("[SYNC] Failed to load watchlist symbols: %v", err)
 			continue
 		}
-		if len(symbols) > 0 {
-			emClient.SetTrackedCodes(symbols)
+		// Always include index symbols in tracked codes
+		seen := make(map[string]bool)
+		for _, s := range indexSymbols {
+			seen[s] = true
+		}
+		for _, s := range symbols {
+			seen[s] = true
+		}
+		all := make([]string, 0, len(seen))
+		for s := range seen {
+			all = append(all, s)
+		}
+		if len(all) > 0 {
+			emClient.SetTrackedCodes(all)
 		}
 	}
 }

@@ -24,7 +24,11 @@ class AnalysisComponent {
       this._strategies = [];
       this._displayNames = [];
     }
-    this.render();
+    // Pre-analyze all watchlist stocks for signal cache (no DOM rendering)
+    const promises = this.watchlist
+      .filter(w => !this.results.has(w.symbol))
+      .map(w => this.analyze(w.symbol));
+    await Promise.all(promises);
   }
 
   async analyze(symbol) {
@@ -86,6 +90,136 @@ class AnalysisComponent {
     await Promise.all(promises);
     this._currentMode = 'sell';
     this._showToggleView();
+  }
+
+  // Render per-stock analysis inline (for watchlist detail view)
+  async renderStockDetail(symbol, containerEl) {
+    // Ensure analysis is done
+    if (!this.results.has(symbol)) {
+      containerEl.innerHTML = '<div style="padding:12px;text-align:center;color:#8b949e;">分析中...</div>';
+      await this.analyze(symbol);
+    }
+    const result = this.results.get(symbol);
+    if (!result) {
+      containerEl.innerHTML = '<div class="empty-state" style="padding:20px;">数据不足，无法分析</div>';
+      return;
+    }
+
+    const w = this.watchlist.find(function(item) { return item.symbol === symbol; });
+    const name = w ? w.name : shortCode(symbol);
+
+    const sellPct = Math.round((result.signals.score / result.signals.maxScore) * 100);
+    const buyPct = Math.round((result.buySignals.score / result.buySignals.maxScore) * 100);
+
+    let sellColor, sellLabel;
+    if (sellPct >= 50) { sellColor = '#f85149'; sellLabel = '强烈卖出'; }
+    else if (sellPct >= 25) { sellColor = '#d29922'; sellLabel = '偏弱'; }
+    else { sellColor = '#3fb950'; sellLabel = '正常'; }
+
+    let buyColor, buyLabel;
+    if (buyPct >= 50) { buyColor = '#3fb950'; buyLabel = '强烈推荐'; }
+    else if (buyPct >= 25) { buyColor = '#d29922'; buyLabel = '关注'; }
+    else { buyColor = '#8b949e'; buyLabel = '暂无信号'; }
+
+    let html = '<div style="background:#161b22;border-radius:8px;padding:16px;margin-top:12px;">';
+    html += '<h3 style="margin:0 0 12px 0;font-size:15px;color:#e6edf3;">技术信号 — ' + escapeHtml(name) + '</h3>';
+
+    // Summary bar
+    html += '<div style="display:flex;gap:12px;margin-bottom:14px;">';
+    html += '<div style="flex:1;background:#21262d;border-radius:6px;padding:10px 14px;text-align:center;">';
+    html += '<div style="font-size:12px;color:#8b949e;margin-bottom:4px;">卖出指数</div>';
+    html += '<div style="font-size:22px;font-weight:700;color:' + sellColor + ';">' + sellPct + '%</div>';
+    html += '<div style="font-size:12px;color:' + sellColor + ';">' + sellLabel + ' (' + result.signals.count + '/' + result.signals.total + ')</div>';
+    html += '</div>';
+    html += '<div style="flex:1;background:#21262d;border-radius:6px;padding:10px 14px;text-align:center;">';
+    html += '<div style="font-size:12px;color:#8b949e;margin-bottom:4px;">买入指数</div>';
+    html += '<div style="font-size:22px;font-weight:700;color:' + buyColor + ';">' + buyPct + '%</div>';
+    html += '<div style="font-size:12px;color:' + buyColor + ';">' + buyLabel + ' (' + result.buySignals.count + '/' + result.buySignals.total + ')</div>';
+    html += '</div>';
+    html += '</div>';
+
+    // Two-column signal details
+    html += '<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:14px;">';
+
+    // Sell signals column
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<table class="data-table"><thead><tr><th>卖出信号</th><th>状态</th></tr></thead><tbody>';
+    for (const signal of result.signals.signals) {
+      let icon, color;
+      if (!signal.triggered) { icon = '○'; color = '#484f58'; }
+      else if (signal.status === 'danger') { icon = '●'; color = '#f85149'; }
+      else { icon = '●'; color = '#d29922'; }
+      html += '<tr><td style="font-size:12px;">' + escapeHtml(signal.name) + '</td>';
+      html += '<td style="color:' + color + ';font-size:12px;">' + icon + '</td></tr>';
+    }
+    html += '</tbody></table>';
+    html += '</div>';
+
+    // Buy signals column
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<table class="data-table"><thead><tr><th>买入信号</th><th>状态</th></tr></thead><tbody>';
+    for (const signal of result.buySignals.signals) {
+      let icon, color;
+      if (!signal.triggered) { icon = '○'; color = '#484f58'; }
+      else if (signal.status === 'danger') { icon = '●'; color = '#3fb950'; }
+      else { icon = '●'; color = '#d29922'; }
+      html += '<tr><td style="font-size:12px;">' + escapeHtml(signal.name) + '</td>';
+      html += '<td style="color:' + color + ';font-size:12px;">' + icon + '</td></tr>';
+    }
+    html += '</tbody></table>';
+    html += '</div>';
+    html += '</div>';
+
+    // Strategy analysis section
+    html += '<details style="cursor:pointer;" open>';
+    html += '<summary style="font-size:14px;font-weight:600;color:#e6edf3;padding:8px 0;">AI 策略分析</summary>';
+    html += '<select id="strategySelect" style="width:100%;padding:6px 10px;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:4px;font-size:13px;margin-bottom:8px;">';
+    for (let i = 0; i < (this._strategies || []).length; i++) {
+      const key = this._strategies[i];
+      const label = (this._displayNames && this._displayNames[i]) ? this._displayNames[i] : key;
+      html += '<option value="' + key + '"' + (key === (this._currentStrategy || 'comprehensive') ? ' selected' : '') + '>' + label + '</option>';
+    }
+    html += '</select>';
+    html += '<div id="strategyResult" style="color:#c9d1d9;line-height:1.4;white-space:pre-wrap;font-size:12px;max-height:400px;overflow-y:auto;"></div>';
+    html += '</details>';
+
+    html += '</div>';
+
+    containerEl.innerHTML = html;
+
+    // Wire up strategy selector
+    const formatMd = (text) => {
+      return escapeHtml(text)
+        .replace(/^### (.+)$/gm, '<h4 style="color:#58a6ff;margin:4px 0 1px;font-size:13px;">$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3 style="color:#ffd700;margin:6px 0 2px;font-size:14px;">$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:#ffd700">$1</strong>')
+        .replace(/^- (.+)$/gm, '<span style="color:#58a6ff">•</span> $1')
+        .replace(/^(\d+)\. (.+)$/gm, '<span style="color:#58a6ff">$1.</span> $2')
+        .replace(/\b(1[7-9]\d{8})\b/g, (_, ts) => {
+          const d = new Date(parseInt(ts) * 1000 + 8 * 3600 * 1000);
+          const pad = n => String(n).padStart(2, '0');
+          return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+        })
+        .replace(/\n/g, '<br>');
+    };
+
+    const bars = result.bars;
+    const runStrategy = (strategy) => {
+      document.getElementById('strategyResult').innerHTML = '分析中...';
+      const barData = bars.map(b => ({ ts: b.time, o: b.open, cl: b.close, h: b.high, l: b.low, v: b.volume }));
+      this.api.post('/api/strategy/analyze', { strategy: strategy, symbol: symbol, bars: barData }).then(resp => {
+        document.getElementById('strategyResult').innerHTML = formatMd(resp.analysis || '无分析结果');
+      }).catch(e => {
+        document.getElementById('strategyResult').innerHTML = '失败: ' + e.message;
+      });
+    };
+
+    const self = this;
+    document.getElementById('strategySelect').addEventListener('change', function() {
+      self._currentStrategy = this.value;
+      runStrategy(this.value);
+    });
+    runStrategy(this._currentStrategy || 'comprehensive');
   }
 
   _showToggleView() {
