@@ -2,25 +2,76 @@
 const api = new ApiClient();
 let dashboardComp, watchlistComp, klineComp, holdingsComp, alertsComp, analysisComp, recommendComp;
 let componentsInited = false;
+let pendingStock = null; // stock symbol to navigate to after components init
 
-// Tab switching
+// Switch to a specific tab programmatically
+function switchToTab(tabName) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+  if (btn) btn.classList.add('active');
+  const pane = document.getElementById(`tab-${tabName}`);
+  if (pane) pane.classList.add('active');
+
+  if (!componentsInited && tabName !== 'dashboard') {
+    initLazyComponents();
+  }
+
+  if (tabName === 'watchlist' && klineComp) {
+    setTimeout(() => klineComp.resize(), 300);
+  }
+}
+
+// Navigate to stock detail page — switches to watchlist tab and selects the stock
+function navigateToStock(symbol) {
+  if (!symbol) return;
+  // Update URL without reload
+  const url = new URL(location);
+  url.searchParams.set('stock', symbol);
+  history.pushState(null, '', url);
+
+  if (!componentsInited) {
+    pendingStock = symbol;
+    switchToTab('watchlist');
+    return;
+  }
+  switchToTab('watchlist');
+  // Ensure "my" sub-tab is active
+  document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+  const myBtn = document.querySelector('.subtab-btn[data-subtab="my"]');
+  if (myBtn) myBtn.classList.add('active');
+  document.getElementById('watchlistMy').style.display = 'block';
+  document.getElementById('watchlistRecommend').style.display = 'none';
+  document.getElementById('addWatchlistBtn').style.display = '';
+
+  if (watchlistComp) {
+    // Check if stock is in watchlist
+    const inList = watchlistComp.watchlist.find(w => w.symbol === symbol);
+    if (inList) {
+      watchlistComp.selectStock(symbol);
+    } else {
+      // Auto-add to watchlist, then select (need name from quote)
+      watchlistComp._promptAddThenSelect(symbol);
+    }
+  }
+}
+
+// Tab switching via click
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
-
-    // Lazily init other components when their tab is first opened
-    if (!componentsInited && btn.dataset.tab !== 'dashboard') {
-      initLazyComponents();
-    }
-
-    // Resize chart when switching to watchlist tab
-    if (btn.dataset.tab === 'watchlist' && klineComp) {
-      setTimeout(() => klineComp.resize(), 300);
-    }
+    switchToTab(btn.dataset.tab);
   });
+});
+
+// Handle browser back/forward
+window.addEventListener('popstate', () => {
+  const params = new URLSearchParams(location.search);
+  const symbol = params.get('stock');
+  if (symbol && componentsInited && watchlistComp) {
+    switchToTab('watchlist');
+    const inList = watchlistComp.watchlist.find(w => w.symbol === symbol);
+    if (inList) watchlistComp.selectStock(symbol);
+  }
 });
 
 // Init dashboard on page load
@@ -30,6 +81,10 @@ async function init() {
     window.location.href = '/login.html';
     return;
   }
+
+  // Check for stock param in URL
+  const params = new URLSearchParams(location.search);
+  pendingStock = params.get('stock');
 
   // Connection status
   api.on('connected', () => {
@@ -58,6 +113,11 @@ async function init() {
   api.on('alert', (alert) => {
     showToast(`⚠ ${escapeHtml(alert.message)}`, 'alert');
   });
+
+  // If URL has stock param, navigate after dashboard is ready
+  if (pendingStock) {
+    switchToTab('watchlist');
+  }
 }
 
 // Lazy-init remaining components when user first switches tabs
@@ -130,11 +190,9 @@ async function initLazyComponents() {
     if (e.key === 'Enter') document.getElementById('recommendSearchBtn').click();
   });
 
-  holdingsComp = new HoldingsComponent(api);
-  await holdingsComp.init();
-
   alertsComp = new AlertsComponent(api);
-  await alertsComp.init();
+  holdingsComp = new HoldingsComponent(api, alertsComp);
+  await holdingsComp.init();
 
   // Wire signal provider for watchlist tab badges
   watchlistComp.signalProvider = (symbol) => {
@@ -190,17 +248,26 @@ async function initLazyComponents() {
     } catch (err) { alert('添加失败: ' + err.message); }
   });
 
-  document.getElementById('addAlertBtn').addEventListener('click', () => showModal('alertModal'));
-  document.getElementById('cancelAlert').addEventListener('click', () => hideModal('alertModal'));
+  document.getElementById('cancelAlert').addEventListener('click', () => {
+    const symbolInput = document.querySelector('#alertForm input[name="symbol"]');
+    if (symbolInput) {
+      symbolInput.readOnly = false;
+      symbolInput.style.background = '';
+    }
+    hideModal('alertModal');
+  });
   document.getElementById('alertForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
     try {
       await api.addAlert(data.symbol, data.type, parseFloat(data.value));
       hideModal('alertModal');
-      e.target.reset();
+      const form = e.target;
+      const si = form.querySelector('input[name="symbol"]');
+      if (si) { si.readOnly = false; si.style.background = ''; }
+      form.reset();
       alertsComp.alerts = await api.getAlerts();
-      alertsComp.render();
+      holdingsComp.render();
     } catch (err) { alert('添加失败: ' + err.message); }
   });
 }

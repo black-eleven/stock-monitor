@@ -8,6 +8,12 @@ class DashboardComponent {
     this.recentAlerts = [];
     this.quoteCache = {};   // symbol -> quote for watchlist re-ranking
     this.symbolNames = {};  // symbol -> name lookup
+    // Hardcoded index codes as fallback (must match backend IndexSymbols)
+    this._indexCodes = new Set(['SH:000001', 'SZ:399001', 'HK:HSI', 'US:IXIC']);
+  }
+
+  _isIndex(symbol) {
+    return this._indexCodes.has(symbol);
   }
 
   async init() {
@@ -57,6 +63,8 @@ class DashboardComponent {
           return;
         }
       }
+      // Skip index quotes even if indices list is not yet populated
+      if (this._isIndex(quote.code)) return;
       // Update watchlist quote cache for re-ranking
       this.quoteCache[quote.code] = quote;
       this._reRankMovers();
@@ -64,6 +72,7 @@ class DashboardComponent {
 
     this.api.on('snapshot', (quotes) => {
       for (const q of quotes) {
+        if (this._isIndex(q.code)) continue;
         this.quoteCache[q.code] = q;
       }
       this._reRankMovers();
@@ -92,6 +101,7 @@ class DashboardComponent {
   _reRankMovers() {
     const entries = [];
     for (const [symbol, q] of Object.entries(this.quoteCache)) {
+      if (this._isIndex(symbol)) continue;
       if (!q.price || !q.yp || q.yp === 0) continue;
       const changePct = ((q.price - q.yp) / q.yp) * 100;
       entries.push({ symbol, price: q.price, changePct });
