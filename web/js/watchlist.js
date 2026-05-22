@@ -218,17 +218,86 @@ class WatchlistComponent {
   }
 
   _showAddDialog() {
-    const symbol = prompt('输入股票代码（如 HK:700 / SH:600519 / US:AAPL）:');
-    if (!symbol) return;
-    const name = prompt('输入股票名称（如 腾讯控股）:');
-    if (!name) return;
-    this.api.addWatchlist(symbol.toUpperCase(), name).then(item => {
-      this.watchlist.push(item);
-      this._notifyWatchlistChange();
-      this.renderTabs();
-      this.selectStock(item.symbol);
-    }).catch(err => {
-      alert('添加失败: ' + err.message);
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal" style="width:480px;">
+      <h3>添加自选股</h3>
+      <input id="addSearchInput" placeholder="搜索股票代码或名称..." autofocus>
+      <div id="addSearchResults" style="max-height:240px;overflow-y:auto;margin-bottom:8px;"></div>
+      <div>已选：<span id="addSelectedInfo" style="color:#8b949e;">--</span></div>
+      <div class="modal-actions">
+        <button id="addConfirmBtn" class="btn btn-primary" disabled>确认添加</button>
+        <button id="addCancelBtn" class="btn">取消</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+
+    const searchInput = overlay.querySelector('#addSearchInput');
+    const resultsEl = overlay.querySelector('#addSearchResults');
+    const selectedInfo = overlay.querySelector('#addSelectedInfo');
+    const confirmBtn = overlay.querySelector('#addConfirmBtn');
+    let selected = null; // { symbol, name }
+    let searchTimer = null;
+
+    const doSearch = async (keyword) => {
+      if (!keyword.trim()) { resultsEl.innerHTML = ''; return; }
+      try {
+        const results = await this.api.get('/api/search?q=' + encodeURIComponent(keyword.trim()));
+        if (!results || results.length === 0) {
+          resultsEl.innerHTML = '<div style="padding:8px;color:#8b949e;font-size:13px;">无匹配结果</div>';
+          return;
+        }
+        resultsEl.innerHTML = results.map(r => {
+          const marketTag = { 'SH:': '沪', 'SZ:': '深', 'HK:': '港', 'US:': '美' }[r.market] || r.market;
+          return `<div class="search-result-item" data-code="${escapeHtml(r.code)}" data-name="${escapeHtml(r.name)}" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #21262d;display:flex;justify-content:space-between;align-items:center;">
+            <span><strong style="color:#e6edf3;">${escapeHtml(r.name)}</strong> <small style="color:#8b949e;">${escapeHtml(shortCode(r.code))}</small></span>
+            <span style="background:#21262d;color:#8b949e;padding:1px 6px;border-radius:4px;font-size:11px;">${marketTag}</span>
+          </div>`;
+        }).join('');
+
+        resultsEl.querySelectorAll('.search-result-item').forEach(el => {
+          el.addEventListener('click', () => {
+            selected = { symbol: el.dataset.code, name: el.dataset.name };
+            selectedInfo.innerHTML = `<strong style="color:#e6edf3;">${escapeHtml(el.dataset.name)}</strong> <small style="color:#8b949e;">${escapeHtml(shortCode(el.dataset.code))}</small>`;
+            confirmBtn.disabled = false;
+            resultsEl.querySelectorAll('.search-result-item').forEach(e => e.style.background = '');
+            el.style.background = '#1a2744';
+          });
+        });
+      } catch (_) {
+        resultsEl.innerHTML = '<div style="padding:8px;color:#8b949e;font-size:13px;">搜索失败</div>';
+      }
+    };
+
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => doSearch(searchInput.value), 300);
     });
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !selected) {
+        e.preventDefault();
+        doSearch(searchInput.value);
+      }
+    });
+
+    const close = () => overlay.remove();
+    overlay.querySelector('#addCancelBtn').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    confirmBtn.addEventListener('click', async () => {
+      if (!selected) return;
+      try {
+        const item = await this.api.addWatchlist(selected.symbol, selected.name);
+        this.watchlist.push(item);
+        this._notifyWatchlistChange();
+        this.renderTabs();
+        this.selectStock(item.symbol);
+        close();
+      } catch (err) {
+        alert('添加失败: ' + err.message);
+      }
+    });
+
+    setTimeout(() => searchInput.focus(), 100);
   }
 }

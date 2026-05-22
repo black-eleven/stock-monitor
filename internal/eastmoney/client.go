@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -802,4 +803,98 @@ func parseFloatStr(s string) float64 {
 	var f float64
 	json.Unmarshal([]byte(s), &f)
 	return f
+}
+
+// SearchResult is a stock suggestion from Eastmoney's search API.
+type SearchResult struct {
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+	Market string `json:"market"`
+	Type   string `json:"type"`
+}
+
+// SearchStocks queries Eastmoney's suggest API for matching stocks by keyword.
+func (c *Client) SearchStocks(keyword string) ([]SearchResult, error) {
+	url := fmt.Sprintf("https://searchapi.eastmoney.com/api/suggest/get?input=%s&type=14&token=D43BF722C8E33BDC906FB84A85E326E8&count=8", url.QueryEscape(keyword))
+	resp, err := c.doGetWithUA(url)
+	if err != nil {
+		return nil, fmt.Errorf("search: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("search read: %w", err)
+	}
+
+	var parsed struct {
+		QuotationCodeTable struct {
+			Data []struct {
+				Code         string `json:"Code"`
+				Name         string `json:"Name"`
+				MktNum       string `json:"MktNum"`
+				SecurityType string `json:"SecurityType"`
+				MarketType   string `json:"MarketType"`
+			} `json:"Data"`
+		} `json:"QuotationCodeTable"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("search parse: %w", err)
+	}
+
+	results := make([]SearchResult, 0, len(parsed.QuotationCodeTable.Data))
+	for _, q := range parsed.QuotationCodeTable.Data {
+		prefix := marketPrefix(q.MktNum)
+		if prefix == "" {
+			continue
+		}
+		// Skip indices, sectors, and derivatives (keep only stocks)
+		if !isStockType(q.MktNum, q.SecurityType) {
+			continue
+		}
+		rawCode := q.Code
+		// Strip leading zeros for HK stocks (e.g. "00700" → "700")
+		if prefix == "HK:" {
+			rawCode = strings.TrimLeft(rawCode, "0")
+			if rawCode == "" {
+				rawCode = "0"
+			}
+		}
+		code := prefix + rawCode
+		results = append(results, SearchResult{
+			Code:   code,
+			Name:   q.Name,
+			Market: prefix,
+			Type:   q.SecurityType,
+		})
+	}
+	return results, nil
+}
+
+func isStockType(mktNum, secType string) bool {
+	switch mktNum {
+	case "1", "0": // SH, SZ — A-shares have SecurityType "1"
+		return secType == "1"
+	case "116": // HK — stocks have SecurityType "6" or "19"
+		return secType == "6" || secType == "19"
+	case "105", "106", "107": // US (NYSE, NASDAQ, AMEX)
+		return secType == "7"
+	default:
+		return false
+	}
+}
+
+func marketPrefix(mkt string) string {
+	switch mkt {
+	case "1":
+		return "SH:"
+	case "0":
+		return "SZ:"
+	case "116":
+		return "HK:"
+	case "105", "106", "107":
+		return "US:"
+	default:
+		return ""
+	}
 }
