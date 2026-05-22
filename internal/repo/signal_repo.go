@@ -53,6 +53,35 @@ func (r *SignalRepo) GetHistory(userID int, symbol string, days int) ([]model.Si
 	return recs, nil
 }
 
+func (r *SignalRepo) GetLatestBuySignals(userID int, limit int) ([]model.SignalRecord, error) {
+	rows, err := r.db.Query(
+		`SELECT s.symbol, s.date, s.buy_score, s.buy_pct, s.sell_score, s.sell_pct, s.buy_count, s.sell_count
+		 FROM signal_history s
+		 INNER JOIN watchlist w ON s.symbol = w.symbol AND w.user_id = ?
+		 WHERE s.user_id = ?
+		 AND s.date = (SELECT MAX(date) FROM signal_history WHERE symbol = s.symbol AND user_id = ?)
+		 ORDER BY s.buy_score DESC LIMIT ?`,
+		userID, userID, userID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var recs []model.SignalRecord
+	for rows.Next() {
+		var rec model.SignalRecord
+		if err := rows.Scan(&rec.Symbol, &rec.Date, &rec.BuyScore, &rec.BuyPct, &rec.SellScore, &rec.SellPct, &rec.BuyCount, &rec.SellCount); err != nil {
+			return nil, err
+		}
+		recs = append(recs, rec)
+	}
+	if recs == nil {
+		recs = []model.SignalRecord{}
+	}
+	return recs, nil
+}
+
 func (r *SignalRepo) GetLatest(userID int, symbol string) (*model.SignalRecord, error) {
 	recs, err := r.GetHistory(userID, symbol, 1)
 	if err != nil {

@@ -20,8 +20,11 @@ func toSinaSymbol(qosSymbol string) (string, error) {
 	case "SZ":
 		return "sz" + code, nil
 	case "HK":
-		for len(code) < 5 {
-			code = "0" + code
+		// Only zero-pad numeric codes (stock symbols); leave index tickers like HSI as-is.
+		if isAllDigits(code) {
+			for len(code) < 5 {
+				code = "0" + code
+			}
 		}
 		return "hk" + code, nil
 	default:
@@ -72,13 +75,27 @@ func toEastmoneySecID(qosSymbol string) (string, error) {
 	case "SZ":
 		return "0." + code, nil
 	case "HK":
-		for len(code) < 5 {
-			code = "0" + code
+		if isAllDigits(code) {
+			for len(code) < 5 {
+				code = "0" + code
+			}
+			return "116." + code, nil
 		}
-		return "116." + code, nil
+		return "100." + code, nil // HK index (e.g. HSI, HSCEI)
+	case "US":
+		return "100." + code, nil // global index (e.g. IXIC, DJI, SPX)
 	default:
 		return "", fmt.Errorf("eastmoney: unsupported market %s", market)
 	}
+}
+
+func isAllDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // ktToEastmoneyKlt converts K-line type to Eastmoney klt parameter.

@@ -110,6 +110,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .holdings-summary .stat .value.up { color: #3fb950; }
 .holdings-summary .stat .value.down { color: #f85149; }
 
+/* Dashboard */
+.dashboard-row { display: flex; gap: 16px; margin-bottom: 16px; }
+.dashboard-row:first-of-type { margin-top: 16px; }
+.dashboard-card { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; min-width: 0; }
+.dashboard-card-title { font-size: 14px; font-weight: 600; color: #8b949e; margin-bottom: 12px; }
+
+/* Index Cards */
+.index-cards { display: flex; gap: 16px; }
+.index-card { flex: 1; background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center; }
+.index-card-name { font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+.index-card-price { font-size: 22px; font-weight: 700; }
+.index-card-price.up { color: #3fb950; }
+.index-card-price.down { color: #f85149; }
+.index-card-change { font-size: 14px; font-weight: 600; margin-top: 2px; }
+.index-card-change.up { color: #3fb950; }
+.index-card-change.down { color: #f85149; }
+
+/* Dash List Items */
+.dash-empty { color: #484f58; font-size: 13px; padding: 16px 0; text-align: center; }
+.dash-list-item { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #21262d; font-size: 14px; }
+.dash-list-item:last-child { border-bottom: none; }
+.dash-list-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash-list-code { color: #484f58; font-size: 12px; margin-left: 6px; flex-shrink: 0; }
+.dash-list-price { margin-left: auto; margin-right: 8px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.dash-list-change { font-weight: 600; font-variant-numeric: tabular-nums; }
+.dash-list-change.up { color: #3fb950; }
+.dash-list-change.down { color: #f85149; }
+
+/* Signal badges in dashboard */
+.dash-signal-badge { margin-left: auto; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.dash-signal-strong { background: rgba(63,185,80,.15); color: #3fb950; }
+.dash-signal-watch { background: rgba(210,153,34,.12); color: #d29922; }
+.dash-signal-none { background: rgba(139,148,158,.08); color: #8b949e; }
+
+/* Alert items in dashboard */
+.dash-alert-msg { margin-left: 8px; color: #8b949e; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.dash-alert-time { margin-left: auto; color: #484f58; font-size: 12px; flex-shrink: 0; }
+
 /* Analysis Tab */
 .analysis-summary { background: #161b22; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; font-size: 16px; font-weight: 500; text-align: center; }
 .analysis-cards { display: flex; flex-direction: column; gap: 8px; }

@@ -1,21 +1,27 @@
 class KlineComponent {
-  constructor(api) {
+  constructor(api, containerId, intervalsContainerId) {
     this.api = api;
+    this.containerId = containerId || 'klineChartContainer';
+    this.intervalsContainerId = intervalsContainerId || 'klineIntervals';
     this.chart = null;
     this.candleSeries = null;
     this.currentSymbol = null;
     this.currentInterval = '1d';
+    this._inited = false;
   }
 
   init() {
-    const BJ = 8 * 3600; // UTC+8 offset in seconds
+    if (this._inited) return;
+    this._inited = true;
+
+    const BJ = 8 * 3600;
     const fmtBeijing = (time) => {
       const d = new Date((time + BJ) * 1000);
       const pad = n => String(n).padStart(2, '0');
       return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
     };
 
-    this.chart = LightweightCharts.createChart(document.getElementById('klineChartContainer'), {
+    this.chart = LightweightCharts.createChart(document.getElementById(this.containerId), {
       layout: { background: { color: '#161b22' }, textColor: '#8b949e' },
       grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
@@ -30,42 +36,39 @@ class KlineComponent {
       wickUpColor: '#3fb950', wickDownColor: '#f85149',
     });
 
-    // Setup interval buttons
-    document.querySelectorAll('.interval-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.interval-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.currentInterval = btn.dataset.kt;
-        if (this.currentSymbol) this.loadData();
+    // Setup interval buttons scoped to the intervals container
+    const intervalsEl = document.getElementById(this.intervalsContainerId);
+    if (intervalsEl) {
+      intervalsEl.querySelectorAll('.interval-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          intervalsEl.querySelectorAll('.interval-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.currentInterval = btn.dataset.kt;
+          if (this.currentSymbol) this.loadData();
+        });
       });
-    });
-
-    // Setup symbol selector
-    const select = document.getElementById('klineSymbol');
-    select.addEventListener('change', () => {
-      this.currentSymbol = select.value;
-      if (this.currentSymbol) this.loadData();
-    });
+    }
   }
 
-  // Update the symbol dropdown from watchlist
   updateSymbols(watchlist) {
-    const select = document.getElementById('klineSymbol');
-    select.innerHTML = watchlist.map(w =>
-      `<option value="${escapeHtml(w.symbol)}">${escapeHtml(w.name)} (${escapeHtml(shortCode(w.symbol))})</option>`
-    ).join('');
     if (watchlist.length > 0 && !this.currentSymbol) {
       this.currentSymbol = watchlist[0].symbol;
       this.loadData();
     }
   }
 
-  // Set symbol externally (from watchlist tab click)
   setSymbol(symbol) {
     this.currentSymbol = symbol;
-    const select = document.getElementById('klineSymbol');
-    if (select) select.value = symbol;
     this.loadData();
+  }
+
+  resize() {
+    if (this.chart) {
+      const container = document.getElementById(this.containerId);
+      if (container && container.offsetParent) {
+        this.chart.resize(container.clientWidth, container.clientHeight);
+      }
+    }
   }
 
   async loadData(retries = 3) {
@@ -86,7 +89,6 @@ class KlineComponent {
             });
           }
         }
-        // Sort by time ascending (QOS returns descending)
         bars.sort((a, b) => a.time - b.time);
         this.candleSeries.setData(bars);
         this.chart.timeScale().fitContent();
@@ -103,15 +105,15 @@ class KlineComponent {
 
   _getMAPeriods() {
     switch (this.currentInterval) {
-      case '5m':  return [24, 48, 96];    // 2h, 4h, 8h
-      case '15m': return [16, 32, 64];    // 4h, 8h, 16h
-      case '30m': return [16, 32, 48];    // 8h, 16h, 24h
-      case '1h':  return [8, 20, 40];     // 1d, 2.5d, 5d
-      case '2h':  return [8, 16, 32];     // 2d, 4d, 8d
-      case '4h':  return [6, 12, 24];     // 2d, 4d, 8d
-      case '1w':  return [4, 13, 26];     // 1mo, 1qt, 2qt
-      case '1M':  return [3, 6, 12];      // 1qt, 2qt, 1yr
-      default:    return [5, 20, 60];     // 1d
+      case '5m':  return [24, 48, 96];
+      case '15m': return [16, 32, 64];
+      case '30m': return [16, 32, 48];
+      case '1h':  return [8, 20, 40];
+      case '2h':  return [8, 16, 32];
+      case '4h':  return [6, 12, 24];
+      case '1w':  return [4, 13, 26];
+      case '1M':  return [3, 6, 12];
+      default:    return [5, 20, 60];
     }
   }
 
@@ -119,16 +121,13 @@ class KlineComponent {
     if (!bars || bars.length < 30) return;
     this._clearIndicators();
 
-    // Calculate indicators with interval-scaled periods
     const [p1, p2, p3] = this._getMAPeriods();
     const ma5 = calcMA(bars, p1);
     const ma20 = calcMA(bars, p2);
     const ma60 = calcMA(bars, p3);
 
-    // Store for cleanup
     this._maLines = [];
 
-    // Draw MA lines (lineWidth 1, no last value label, no price line)
     if (ma5.length > 0) {
       const line = this.chart.addLineSeries({ color: '#ffe066', lineWidth: 1, lastValueVisible: false, priceLineVisible: false });
       line.setData(ma5);
@@ -146,8 +145,6 @@ class KlineComponent {
     }
 
     const crossMarkers = [];
-
-    // Draw buy/sell signal markers for latest bar
     const rsi = calcRSI(bars, 14);
     const macd = calcMACD(bars);
     const sellSignals = evaluateSignals(bars, { ma5, ma20, ma60 }, rsi, macd);
@@ -174,14 +171,5 @@ class KlineComponent {
     }
     this._maLines = [];
     this.candleSeries.setMarkers([]);
-  }
-
-  resize() {
-    if (this.chart) {
-      const container = document.getElementById('klineChartContainer');
-      if (container) {
-        this.chart.resize(container.clientWidth, container.clientHeight);
-      }
-    }
   }
 }

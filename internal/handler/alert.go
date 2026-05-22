@@ -21,6 +21,7 @@ func NewAlertHandler(r *repo.AlertRepo) *AlertHandler {
 
 func (h *AlertHandler) Register(api *gin.RouterGroup) {
 	api.GET("/alerts", h.getAll)
+	api.GET("/alerts/logs", h.getLogs)
 	api.POST("/alerts", h.add)
 	api.PUT("/alerts/:id", h.update)
 	api.DELETE("/alerts/:id", h.remove)
@@ -98,6 +99,20 @@ func (h *AlertHandler) update(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func (h *AlertHandler) getLogs(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "50")
+	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	logs, err := h.repo.GetLogs(limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch alert logs"})
+		return
+	}
+	c.JSON(http.StatusOK, logs)
 }
 
 func (h *AlertHandler) remove(c *gin.Context) {

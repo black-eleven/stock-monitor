@@ -85,6 +85,14 @@ func (h *Hub) sendSnapshot(client *Client) {
 	}
 }
 
+func (h *Hub) GetQuote(symbol string) (json.RawMessage, bool) {
+	v, ok := h.quotes.Load(symbol)
+	if !ok {
+		return nil, false
+	}
+	return v.(json.RawMessage), true
+}
+
 func (h *Hub) BroadcastQuote(quote interface{}) {
 	data, _ := json.Marshal(quote)
 	// Store in cache so new clients receive it in snapshot
