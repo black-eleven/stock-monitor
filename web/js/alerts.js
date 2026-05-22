@@ -7,7 +7,6 @@ class AlertsComponent {
 
   async init() {
     this.alerts = await this.api.getAlerts();
-    this.render();
   }
 
   addLog(log) {

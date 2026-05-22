@@ -42,11 +42,18 @@ class WatchlistComponent {
     }
   }
 
-  selectStock(symbol) {
+  selectStock(symbol, updateUrl = true) {
     this.selectedSymbol = symbol;
     this.renderTabs();
     const quote = this.quotes[symbol];
     this.renderDetail(symbol, quote);
+
+    // Update URL for deep linking
+    if (updateUrl) {
+      const url = new URL(location);
+      url.searchParams.set('stock', symbol);
+      history.replaceState(null, '', url);
+    }
 
     // Show kline chart
     const klineIntervals = document.getElementById('watchlistKlineIntervals');
@@ -193,6 +200,21 @@ class WatchlistComponent {
   _notifyWatchlistChange() {
     if (this.klineComp) this.klineComp.updateSymbols(this.watchlist);
     if (this.onWatchlistChange) this.onWatchlistChange(this.watchlist);
+  }
+
+  // Prompt user to add a stock (not in watchlist) then select it
+  async _promptAddThenSelect(symbol) {
+    const name = prompt(`该股票不在自选列表中，输入名称以添加并查看详情（如 腾讯控股）:\n\n${symbol}`);
+    if (!name) return;
+    try {
+      const item = await this.api.addWatchlist(symbol.toUpperCase(), name);
+      this.watchlist.push(item);
+      this._notifyWatchlistChange();
+      this.renderTabs();
+      this.selectStock(item.symbol);
+    } catch (err) {
+      alert('添加失败: ' + err.message);
+    }
   }
 
   _showAddDialog() {
