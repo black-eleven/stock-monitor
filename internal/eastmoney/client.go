@@ -525,7 +525,12 @@ func (c *Client) FetchHistoryKline(code string, kt int, count int) ([]json.RawMe
 	}
 	if strings.HasPrefix(code, "HK:") {
 		log.Printf("[KLINE] Sina failed for %s, falling back to Eastmoney", code)
-		return c.fetchEastmoneyKline(code, kt, count)
+		data, err = c.fetchEastmoneyKline(code, kt, count)
+		if err == nil && len(data) > 0 {
+			return data, nil
+		}
+		log.Printf("[KLINE] Eastmoney failed for %s, falling back to Tencent", code)
+		return c.fetchTencentKline(code, kt, count)
 	}
 	return data, err
 }
