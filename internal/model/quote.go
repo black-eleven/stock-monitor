@@ -41,3 +41,27 @@ type KlineItem struct {
 	C string     `json:"c"`
 	K []KlineBar `json:"k"`
 }
+
+type Fundamentals struct {
+	Code            string  `json:"code"`
+	PE              float64 `json:"pe"`
+	PB              float64 `json:"pb"`
+	MarketCap       float64 `json:"marketCap"`
+	CirculatingCap  float64 `json:"circulatingCap"`
+	ROE             float64 `json:"roe"`
+	NAVPerShare     float64 `json:"navPerShare"`
+	Industry        string  `json:"industry"`
+	Revenue         float64 `json:"revenue"`
+	NetProfitGrowth float64 `json:"netProfitGrowth"`
+	RevenueGrowth   float64 `json:"revenueGrowth"`
+}
+
+func FromEMFundamentals(f eastmoney.Fundamentals) Fundamentals {
+	return Fundamentals{
+		Code: f.Code, PE: f.PE, PB: f.PB,
+		MarketCap: f.MarketCap, CirculatingCap: f.CirculatingCap,
+		ROE: f.ROE, NAVPerShare: f.NAVPerShare,
+		Industry: f.Industry, Revenue: f.Revenue,
+		NetProfitGrowth: f.NetProfitGrowth, RevenueGrowth: f.RevenueGrowth,
+	}
+}

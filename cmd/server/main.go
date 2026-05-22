@@ -77,12 +77,13 @@ func main() {
 	recommendH := handler.NewRecommendHandler(recommender, watchlistRepo)
 
 	// Strategy handler
-	strategyH := handler.NewStrategyHandler(llmClient)
+	strategyH := handler.NewStrategyHandler(llmClient, emClient)
 
 	signalRepo := repo.NewSignalRepo(database)
 	signalH := handler.NewSignalHandler(signalRepo, hub)
 
 	searchH := handler.NewSearchHandler(emClient)
+	fundamentalsH := handler.NewFundamentalsHandler(emClient)
 	dashboardH := handler.NewDashboardHandler(hub, watchlistRepo, alertRepo, signalRepo)
 
 	authH := handler.NewAuthHandler(userRepo, inviteCodeRepo, cfg.JwtSecret)
@@ -106,6 +107,7 @@ func main() {
 	signalH.Register(auth)
 	strategyH.Register(auth)
 	searchH.Register(auth)
+	fundamentalsH.Register(auth)
 	dashboardH.Register(auth)
 
 	// Admin routes

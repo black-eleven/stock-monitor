@@ -181,6 +181,9 @@ class WatchlistComponent {
       }
     }
 
+    // Load fundamentals asynchronously
+    this.renderFundamentals(symbol);
+
     document.getElementById('removeStockBtn')?.addEventListener('click', async () => {
       const code = symbol;
       await this.api.removeWatchlist(code);
@@ -195,6 +198,39 @@ class WatchlistComponent {
         this._hidePanels();
       }
     });
+  }
+
+  async renderFundamentals(symbol) {
+    const el = document.getElementById('stockDetail');
+    // Remove previous fundamentals grid if any
+    const prev = document.getElementById('fundGrid');
+    if (prev) prev.remove();
+
+    var fundEl = document.createElement('div');
+    fundEl.id = 'fundGrid';
+    fundEl.className = 'info-grid fundamentals-grid';
+    fundEl.innerHTML = '<div class="info-item" style="color:#8b949e;">基本面数据加载中...</div>';
+    el.appendChild(fundEl);
+
+    try {
+      const f = await this.api.getFundamentals(symbol);
+      if (!f || (!f.pe && !f.pb && !f.roe && !f.marketCap && !f.industry)) {
+        fundEl.innerHTML = '<div class="info-item" style="color:#8b949e;">暂无基本面数据</div>';
+        return;
+      }
+      var items = [];
+      if (f.pe) items.push('<div class="info-item">市盈率(PE) <span class="value">' + f.pe.toFixed(2) + '</span></div>');
+      if (f.pb) items.push('<div class="info-item">市净率(PB) <span class="value">' + f.pb.toFixed(2) + '</span></div>');
+      if (f.roe) items.push('<div class="info-item">ROE <span class="value">' + f.roe.toFixed(2) + '%</span></div>');
+      if (f.marketCap) items.push('<div class="info-item">总市值 <span class="value">' + formatMarketCap(f.marketCap) + '</span></div>');
+      if (f.navPerShare) items.push('<div class="info-item">每股净资产 <span class="value">' + f.navPerShare.toFixed(2) + '</span></div>');
+      if (f.industry) items.push('<div class="info-item">行业 <span class="value">' + escapeHtml(f.industry) + '</span></div>');
+      if (f.netProfitGrowth) items.push('<div class="info-item">净利增长率 <span class="value">' + f.netProfitGrowth.toFixed(2) + '%</span></div>');
+      if (f.revenueGrowth) items.push('<div class="info-item">营收增长率 <span class="value">' + f.revenueGrowth.toFixed(2) + '%</span></div>');
+      fundEl.innerHTML = items.join('');
+    } catch (_) {
+      fundEl.innerHTML = '<div class="info-item" style="color:#8b949e;">基本面数据获取失败</div>';
+    }
   }
 
   _notifyWatchlistChange() {

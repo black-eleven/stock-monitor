@@ -58,3 +58,12 @@ function escapeHtml(text) {
 function shortCode(code) {
   return code.replace(/^(HK|SH|SZ|US):/, '');
 }
+
+// Format market cap: auto-adapt to 万/亿/万亿
+function formatMarketCap(v) {
+  if (v == null || isNaN(v) || v === 0) return '--';
+  if (v >= 1e12) return (v / 1e12).toFixed(2) + '万亿';
+  if (v >= 1e8) return (v / 1e8).toFixed(2) + '亿';
+  if (v >= 1e4) return (v / 1e4).toFixed(2) + '万';
+  return v.toFixed(0);
+}

@@ -51,6 +51,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .stock-detail .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .stock-detail .info-item { font-size: 13px; color: #8b949e; }
 .stock-detail .info-item .value { color: #e6edf3; font-weight: 500; }
+.stock-detail .fundamentals-grid { margin-top: 12px; padding-top: 12px; border-top: 1px solid #21262d; }
 
 /* Chart */
 .chart-container { background: #161b22; border-radius: 8px; padding: 12px; height: 360px; }

@@ -181,6 +181,34 @@ func (r *AlertRepo) GetLogs(limit int) ([]model.AlertLog, error) {
 	return logs, nil
 }
 
+func (r *AlertRepo) GetLogsByUser(userID int, limit int) ([]model.AlertLog, error) {
+	rows, err := r.db.Query(
+		`SELECT l.id, l.alert_id, l.symbol, l.price, l.message, l.triggered_at
+		 FROM alert_logs l
+		 INNER JOIN alerts a ON l.alert_id = a.id
+		 WHERE a.user_id = ?
+		 ORDER BY l.id DESC LIMIT ?`,
+		userID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []model.AlertLog
+	for rows.Next() {
+		var l model.AlertLog
+		if err := rows.Scan(&l.ID, &l.AlertID, &l.Symbol, &l.Price, &l.Message, &l.TriggeredAt); err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	if logs == nil {
+		logs = []model.AlertLog{}
+	}
+	return logs, nil
+}
+
 func (r *AlertRepo) PurgeOldLogs(keep int) error {
 	_, err := r.db.Exec(
 		"DELETE FROM alert_logs WHERE id NOT IN (SELECT id FROM alert_logs ORDER BY id DESC LIMIT ?)",

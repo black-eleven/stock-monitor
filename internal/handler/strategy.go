@@ -7,12 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/black-eleven/stock-monitor/internal/eastmoney"
 	"github.com/black-eleven/stock-monitor/internal/llm"
 	"github.com/gin-gonic/gin"
 )
 
 type StrategyHandler struct {
 	llmClient *llm.Client
+	emClient  eastmoney.QuoteClient
 	cache     map[string]*strategyCacheEntry
 	cacheMu   sync.RWMutex
 }
@@ -22,9 +24,10 @@ type strategyCacheEntry struct {
 	expiresAt time.Time
 }
 
-func NewStrategyHandler(llmClient *llm.Client) *StrategyHandler {
+func NewStrategyHandler(llmClient *llm.Client, emClient eastmoney.QuoteClient) *StrategyHandler {
 	return &StrategyHandler{
 		llmClient: llmClient,
+		emClient:  emClient,
 		cache:     make(map[string]*strategyCacheEntry),
 	}
 }
@@ -88,7 +91,14 @@ func (h *StrategyHandler) runSingle(strategy, symbol string, bars []barData) str
 	}
 
 	sysPrompt := llm.StrategyPrompt(strategy)
-	dataPrompt := buildDataPrompt(symbol, bars)
+
+	var fundText string
+	if h.emClient != nil {
+		if fund, err := h.emClient.FetchFundamentalsCached(symbol); err == nil && fund != nil {
+			fundText = fund.ToPromptText()
+		}
+	}
+	dataPrompt := buildDataPrompt(symbol, bars, fundText)
 	analysis, err := h.llmClient.Chat(sysPrompt, dataPrompt)
 	if err != nil {
 		return "分析失败: " + err.Error()
@@ -194,9 +204,13 @@ func (h *StrategyHandler) list(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"strategies": names, "displayNames": displayNames})
 }
 
-func buildDataPrompt(symbol string, bars []barData) string {
+func buildDataPrompt(symbol string, bars []barData, fundText string) string {
 	if len(bars) == 0 {
-		return fmt.Sprintf("股票：%s，无K线数据", symbol)
+		msg := fmt.Sprintf("股票：%s，无K线数据", symbol)
+		if fundText != "" {
+			msg += "\n\n" + fundText
+		}
+		return msg
 	}
 
 	start := 0
@@ -242,6 +256,11 @@ func buildDataPrompt(symbol string, bars []barData) string {
 	}
 	avgVol /= float64(len(recent))
 	sb.WriteString(fmt.Sprintf("均量: %.0f\n", avgVol))
+
+	if fundText != "" {
+		sb.WriteString("\n")
+		sb.WriteString(fundText)
+	}
 
 	return sb.String()
 }

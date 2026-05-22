@@ -134,7 +134,7 @@ func (h *DashboardHandler) serve(c *gin.Context) {
 	}
 
 	// 3. Recent alert logs (enriched with watchlist names)
-	rawLogs, err := h.alertRepo.GetLogs(3)
+	rawLogs, err := h.alertRepo.GetLogsByUser(userID, 3)
 	if err != nil {
 		rawLogs = []model.AlertLog{}
 	}
