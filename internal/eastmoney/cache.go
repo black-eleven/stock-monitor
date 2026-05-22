@@ -107,6 +107,10 @@ func (c *Client) FetchQuoteCached(code string) (*Quote, error) {
 		quoteCacheMu.RUnlock()
 		return q, nil
 	}
+	var stale *Quote
+	if e, ok := quoteCache[key]; ok {
+		stale = e.data
+	}
 	quoteCacheMu.RUnlock()
 
 	quoteMergeMu.Lock()
@@ -123,6 +127,9 @@ func (c *Client) FetchQuoteCached(code string) (*Quote, error) {
 			quoteCacheMu.Lock()
 			quoteCache[key] = &quoteCacheEntry{data: q, expiresAt: time.Now().Add(30 * time.Second)}
 			quoteCacheMu.Unlock()
+		} else if err != nil && stale != nil {
+			q = stale
+			err = nil
 		}
 		m.resolve(mergeResult{q: q, err: err})
 		quoteMergeMu.Lock()

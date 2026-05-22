@@ -129,7 +129,28 @@ func (c *Client) BatchFetchQuotes(codes []string) (map[string]*Quote, error) {
 		return nil, fmt.Errorf("sina quote read: %w", err)
 	}
 
-	return parseSinaQuote(string(body), codeMap), nil
+	result := parseSinaQuote(string(body), codeMap)
+
+	// Fallback to Eastmoney for codes Sina didn't return (common during non-trading hours).
+	var missing []string
+	for _, code := range codes {
+		if _, ok := result[code]; !ok {
+			missing = append(missing, code)
+		}
+	}
+	if len(missing) > 0 {
+		log.Printf("[QUOTE] Sina missing %d/%d codes, falling back to Eastmoney", len(missing), len(codes))
+		emQuotes, emErr := c.fetchEastmoneyQuotes(missing)
+		if emErr != nil {
+			log.Printf("[QUOTE] Eastmoney fallback error: %v", emErr)
+		} else {
+			for code, q := range emQuotes {
+				result[code] = q
+			}
+		}
+	}
+
+	return result, nil
 }
 
 // ---- Quote via Tencent Finance (HK/overseas) ----
@@ -641,6 +662,123 @@ func rawToString(raw json.RawMessage) string {
 		return s
 	}
 	return string(raw)
+}
+
+// ---- Eastmoney quote (mainland fallback) ----
+
+func (c *Client) fetchEastmoneyQuotes(codes []string) (map[string]*Quote, error) {
+	if len(codes) == 0 {
+		return map[string]*Quote{}, nil
+	}
+
+	secids := make([]string, 0, len(codes))
+	secidToCode := make(map[string]string, len(codes))
+	for _, code := range codes {
+		secid, err := toEastmoneySecID(code)
+		if err != nil {
+			continue
+		}
+		secids = append(secids, secid)
+		secidToCode[secid] = code
+	}
+	if len(secids) == 0 {
+		return map[string]*Quote{}, nil
+	}
+
+	url := fmt.Sprintf(
+		"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&fields=f2,f5,f6,f12,f15,f16,f17,f18&secids=%s",
+		strings.Join(secids, ","),
+	)
+
+	resp, err := c.doGetWithUA(url)
+	if err != nil {
+		return nil, fmt.Errorf("eastmoney quote: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("eastmoney quote HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("eastmoney quote read: %w", err)
+	}
+
+	return parseEastmoneyQuote(body, secidToCode)
+}
+
+func parseEastmoneyQuote(body []byte, secidToCode map[string]string) (map[string]*Quote, error) {
+	var resp struct {
+		Data struct {
+			Diff []map[string]interface{} `json:"diff"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("eastmoney quote parse: %w", err)
+	}
+
+	quotes := make(map[string]*Quote, len(resp.Data.Diff))
+	ts := time.Now().Unix()
+
+	for _, item := range resp.Data.Diff {
+		code := getStringField(item, "f12")
+		if code == "" {
+			continue
+		}
+
+		qosCode := findCodeByRaw(secidToCode, code)
+		if qosCode == "" {
+			continue
+		}
+
+		q := &Quote{
+			Code:      qosCode,
+			Price:     getFloatField(item, "f2"),
+			Open:      getFloatField(item, "f17"),
+			YP:        getFloatField(item, "f18"),
+			High:      getFloatField(item, "f15"),
+			Low:       getFloatField(item, "f16"),
+			Volume:    getFloatField(item, "f5") * 100, // 手 → 股
+			Turnover:  getFloatField(item, "f6"),
+			Timestamp: ts,
+			Status:    "OK",
+		}
+		quotes[qosCode] = q
+	}
+	return quotes, nil
+}
+
+// findCodeByRaw finds the qosCode (e.g. "SH:600519") matching a raw numeric code.
+func findCodeByRaw(secidToCode map[string]string, rawCode string) string {
+	for _, qosCode := range secidToCode {
+		if strings.HasSuffix(qosCode, ":"+rawCode) {
+			return qosCode
+		}
+	}
+	return ""
+}
+
+func getStringField(item map[string]interface{}, key string) string {
+	if v, ok := item[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func getFloatField(item map[string]interface{}, key string) float64 {
+	if v, ok := item[key]; ok {
+		switch n := v.(type) {
+		case float64:
+			return n
+		case string:
+			return parseFloatStr(n)
+		}
+	}
+	return 0
 }
 
 // ---- Helpers ----
