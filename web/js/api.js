@@ -119,6 +119,10 @@ class ApiClient {
     return this.get(`/api/kline/${symbol}?interval=${interval}&count=${count}`);
   }
 
+  async getFundamentals(symbol) {
+    return this.get(`/api/fundamentals/${encodeURIComponent(symbol)}`);
+  }
+
   async recommend(industry) {
     return this.post('/api/recommendations', { industry });
   }

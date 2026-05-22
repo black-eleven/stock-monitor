@@ -102,12 +102,13 @@ func (h *AlertHandler) update(c *gin.Context) {
 }
 
 func (h *AlertHandler) getLogs(c *gin.Context) {
+	userID := middleware.GetUserID(c)
 	limitStr := c.DefaultQuery("limit", "50")
 	limit, _ := strconv.Atoi(limitStr)
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	logs, err := h.repo.GetLogs(limit)
+	logs, err := h.repo.GetLogsByUser(userID, limit)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch alert logs"})
 		return

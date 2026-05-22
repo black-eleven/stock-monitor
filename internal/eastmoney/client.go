@@ -28,10 +28,82 @@ type Quote struct {
 	Status    string  `json:"status"`
 }
 
+// Fundamentals represents fundamental/valuation data for a stock.
+type Fundamentals struct {
+	Code            string  `json:"code"`
+	PE              float64 `json:"pe"`
+	PB              float64 `json:"pb"`
+	MarketCap       float64 `json:"marketCap"`
+	CirculatingCap  float64 `json:"circulatingCap"`
+	ROE             float64 `json:"roe"`
+	NAVPerShare     float64 `json:"navPerShare"`
+	Industry        string  `json:"industry"`
+	Revenue         float64 `json:"revenue"`
+	NetProfitGrowth float64 `json:"netProfitGrowth"`
+	RevenueGrowth   float64 `json:"revenueGrowth"`
+}
+
+// ToPromptText formats fundamental data as a Chinese text block for LLM prompts.
+func (f *Fundamentals) ToPromptText() string {
+	var sb strings.Builder
+	sb.WriteString("基本面数据：\n")
+	hasData := false
+	if f.PE > 0 {
+		sb.WriteString(fmt.Sprintf("- 动态市盈率(PE): %.2f\n", f.PE))
+		hasData = true
+	}
+	if f.PB > 0 {
+		sb.WriteString(fmt.Sprintf("- 市净率(PB): %.2f\n", f.PB))
+		hasData = true
+	}
+	if f.ROE > 0 {
+		sb.WriteString(fmt.Sprintf("- 净资产收益率(ROE): %.2f%%\n", f.ROE))
+		hasData = true
+	}
+	if f.MarketCap > 0 {
+		sb.WriteString(fmt.Sprintf("- 总市值: %s\n", formatCap(f.MarketCap)))
+		hasData = true
+	}
+	if f.NAVPerShare > 0 {
+		sb.WriteString(fmt.Sprintf("- 每股净资产: %.2f元\n", f.NAVPerShare))
+		hasData = true
+	}
+	if f.Industry != "" {
+		sb.WriteString(fmt.Sprintf("- 行业: %s\n", f.Industry))
+		hasData = true
+	}
+	if f.NetProfitGrowth != 0 {
+		sb.WriteString(fmt.Sprintf("- 净利润增长率: %.2f%%\n", f.NetProfitGrowth))
+		hasData = true
+	}
+	if f.RevenueGrowth != 0 {
+		sb.WriteString(fmt.Sprintf("- 营收增长率: %.2f%%\n", f.RevenueGrowth))
+		hasData = true
+	}
+	if !hasData {
+		return ""
+	}
+	return sb.String()
+}
+
+func formatCap(v float64) string {
+	switch {
+	case v >= 1e12:
+		return fmt.Sprintf("%.2f万亿", v/1e12)
+	case v >= 1e8:
+		return fmt.Sprintf("%.2f亿", v/1e8)
+	case v >= 1e4:
+		return fmt.Sprintf("%.2f万", v/1e4)
+	default:
+		return fmt.Sprintf("%.0f", v)
+	}
+}
+
 // QuoteClient is the interface for fetching stock data.
 type QuoteClient interface {
 	FetchQuoteCached(code string) (*Quote, error)
 	FetchHistoryKlineCached(code string, kt int, count int) ([]json.RawMessage, error)
+	FetchFundamentalsCached(code string) (*Fundamentals, error)
 }
 
 type Client struct {
@@ -897,4 +969,76 @@ func marketPrefix(mkt string) string {
 	default:
 		return ""
 	}
+}
+
+func (c *Client) FetchFundamentals(symbol string) (*Fundamentals, error) {
+	// Convert to Tencent format: SH:600519 → sh600519, HK:00700 → hk00700, etc.
+	ts, err := toSinaSymbol(symbol)
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("http://qt.gtimg.cn/q=%s", ts)
+
+	resp, err := c.doGetWithUA(url)
+	if err != nil {
+		return nil, fmt.Errorf("fundamentals: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("fundamentals HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("fundamentals read: %w", err)
+	}
+
+	return parseFundamentalsFromTencent(body, symbol)
+}
+
+// parseFundamentalsFromTencent parses the Tencent qt.gtimg.cn response for fundamental data.
+// Field positions (0-indexed, split by ~):
+//
+//	Both A-shares & HK:  [39]=PE(TTM), [44]=marketCap(亿), [45]=circulatingCap(亿)
+//	A-shares only:        [46]=PB (HK has company name here)
+func parseFundamentalsFromTencent(body []byte, code string) (*Fundamentals, error) {
+	bodyStr := string(body)
+	eq := strings.IndexByte(bodyStr, '"')
+	if eq < 0 {
+		return &Fundamentals{Code: code}, nil
+	}
+	start := eq + 1
+	end := strings.LastIndexByte(bodyStr, '"')
+	if end <= start {
+		return &Fundamentals{Code: code}, nil
+	}
+	payload := bodyStr[start:end]
+	fields := strings.Split(payload, "~")
+
+	f := &Fundamentals{Code: code}
+	if len(fields) < 47 {
+		return f, nil
+	}
+
+	// PE (TTM / 动态市盈率) — field 39
+	f.PE = parseFloatStr(fields[39])
+
+	// Total market cap (总市值) — field 44, unit: 亿
+	if capYuan := parseFloatStr(fields[44]); capYuan > 0 {
+		f.MarketCap = capYuan * 1e8
+	}
+	// Circulating market cap — field 45, unit: 亿
+	if capCirc := parseFloatStr(fields[45]); capCirc > 0 {
+		f.CirculatingCap = capCirc * 1e8
+	}
+
+	// PB (市净率) — field 46, A-shares only (HK has company name text here)
+	if strings.HasPrefix(code, "SH:") || strings.HasPrefix(code, "SZ:") {
+		f.PB = parseFloatStr(fields[46])
+	}
+
+	return f, nil
 }

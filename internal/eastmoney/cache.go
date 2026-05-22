@@ -26,6 +26,7 @@ type mergeEntry struct {
 type mergeResult struct {
 	data []json.RawMessage
 	q    *Quote
+	fund *Fundamentals
 	err  error
 }
 
@@ -96,6 +97,64 @@ func (c *Client) FetchHistoryKlineCached(code string, kt int, count int) ([]json
 
 	<-m.done
 	return m.result.data, m.result.err
+}
+
+type fundamentalsCacheEntry struct {
+	data      *Fundamentals
+	expiresAt time.Time
+}
+
+var (
+	fundamentalsCache   = map[string]*fundamentalsCacheEntry{}
+	fundamentalsCacheMu sync.RWMutex
+	fundamentalsMerge   = map[string]*mergeEntry{}
+	fundamentalsMergeMu sync.Mutex
+)
+
+func (c *Client) FetchFundamentalsCached(code string) (*Fundamentals, error) {
+	key := code
+
+	fundamentalsCacheMu.RLock()
+	if e, ok := fundamentalsCache[key]; ok && time.Now().Before(e.expiresAt) {
+		d := e.data
+		fundamentalsCacheMu.RUnlock()
+		return d, nil
+	}
+	var stale *Fundamentals
+	if e, ok := fundamentalsCache[key]; ok {
+		stale = e.data
+	}
+	fundamentalsCacheMu.RUnlock()
+
+	fundamentalsMergeMu.Lock()
+	m, exists := fundamentalsMerge[key]
+	if !exists {
+		m = &mergeEntry{done: make(chan struct{})}
+		fundamentalsMerge[key] = m
+	}
+	fundamentalsMergeMu.Unlock()
+
+	if !exists {
+		f, err := c.FetchFundamentals(code)
+		if err == nil && f != nil {
+			fundamentalsCacheMu.Lock()
+			fundamentalsCache[key] = &fundamentalsCacheEntry{
+				data: f, expiresAt: time.Now().Add(5 * time.Minute),
+			}
+			fundamentalsCacheMu.Unlock()
+		} else if err != nil && stale != nil {
+			f = stale
+			err = nil
+		}
+		m.resolve(mergeResult{fund: f, err: err})
+		fundamentalsMergeMu.Lock()
+		delete(fundamentalsMerge, key)
+		fundamentalsMergeMu.Unlock()
+		return f, err
+	}
+
+	<-m.done
+	return m.result.fund, m.result.err
 }
 
 func (c *Client) FetchQuoteCached(code string) (*Quote, error) {
