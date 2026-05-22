@@ -76,34 +76,95 @@ class _WatchlistScreenState extends ConsumerState<WatchlistScreen>
   }
 
   Future<void> _add() async {
-    final symbolCtrl = TextEditingController();
-    final nameCtrl = TextEditingController();
+    final searchCtrl = TextEditingController();
+    List<Map<String, String>> _results = [];
+    Map<String, String>? _selected;
+    bool _searching = false;
 
-    final ok = await showDialog<bool>(
+    Future<void> doSearch(String kw) async {
+      if (kw.trim().isEmpty) return;
+      _searching = true;
+      try {
+        final api = ref.read(apiClientProvider);
+        final res = await api.get('/search', queryParameters: {'q': kw});
+        _results = (res.data as List).map((e) => {
+          'code': e['code'] as String,
+          'name': e['name'] as String,
+          'market': e['market'] as String,
+        }).toList();
+      } catch (_) { _results = []; }
+      _searching = false;
+    }
+
+    final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('添加自选'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: symbolCtrl, decoration: const InputDecoration(hintText: '代码 (如 HK:700)')),
-          const SizedBox(height: 12),
-          TextField(controller: nameCtrl, decoration: const InputDecoration(hintText: '名称 (如 腾讯控股)')),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('添加')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('添加自选'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                controller: searchCtrl,
+                decoration: const InputDecoration(hintText: '搜索代码或名称...', prefixIcon: Icon(Icons.search)),
+                autofocus: true,
+                onChanged: (v) async {
+                  await doSearch(v);
+                  setD(() {});
+                },
+              ),
+              const SizedBox(height: 8),
+              if (_selected != null)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: AppTheme.accent.withAlpha(30), borderRadius: BorderRadius.circular(6)),
+                  child: Row(children: [
+                    Expanded(child: Text('${_selected!['name']} (${_selected!['code']})', style: const TextStyle(color: AppTheme.accent))),
+                    GestureDetector(onTap: () { _selected = null; setD(() {}); }, child: const Icon(Icons.close, size: 16, color: AppTheme.textSecondary)),
+                  ]),
+                ),
+              if (_selected == null) ...[
+                const SizedBox(height: 4),
+                SizedBox(
+                  height: 180,
+                  child: _searching
+                      ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                      : _results.isEmpty
+                          ? const Center(child: Text('输入关键词搜索', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)))
+                          : ListView(
+                              children: _results.map((r) => ListTile(
+                                dense: true,
+                                title: Text(r['name']!, style: const TextStyle(fontSize: 14)),
+                                subtitle: Text('${r['code']} · ${_marketLabel(r['market']!)}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                onTap: () { _selected = r; setD(() {}); },
+                              )).toList(),
+                            ),
+                ),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            FilledButton(
+              onPressed: _selected != null ? () => Navigator.pop(ctx, _selected) : null,
+              child: const Text('添加'),
+            ),
+          ],
+        ),
       ),
     );
 
-    if (ok == true && symbolCtrl.text.isNotEmpty && nameCtrl.text.isNotEmpty) {
+    if (result != null) {
       try {
-        await ref.read(watchlistApiProvider).add(symbolCtrl.text.toUpperCase(), nameCtrl.text);
+        await ref.read(watchlistApiProvider).add(result['code']!.toUpperCase(), result['name']!);
         await _load();
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('添加失败: $e')));
       }
     }
   }
+
+  String _marketLabel(String m) => {'SH:': '沪', 'SZ:': '深', 'HK:': '港', 'US:': '美'}[m] ?? m;
 
   void _openStockDetail(String symbol) {
     Navigator.of(context).pushNamed('/stock-detail', arguments: {'symbol': symbol});

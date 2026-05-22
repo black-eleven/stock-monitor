@@ -82,6 +82,7 @@ func main() {
 	signalRepo := repo.NewSignalRepo(database)
 	signalH := handler.NewSignalHandler(signalRepo, hub)
 
+	searchH := handler.NewSearchHandler(emClient)
 	dashboardH := handler.NewDashboardHandler(hub, watchlistRepo, alertRepo, signalRepo)
 
 	authH := handler.NewAuthHandler(userRepo, inviteCodeRepo, cfg.JwtSecret)
@@ -104,6 +105,7 @@ func main() {
 	recommendH.Register(auth)
 	signalH.Register(auth)
 	strategyH.Register(auth)
+	searchH.Register(auth)
 	dashboardH.Register(auth)
 
 	// Admin routes
