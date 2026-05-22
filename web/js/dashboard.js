@@ -102,6 +102,8 @@ class DashboardComponent {
     const entries = [];
     for (const [symbol, q] of Object.entries(this.quoteCache)) {
       if (this._isIndex(symbol)) continue;
+      // Only include stocks the current user knows (watchlist or dashboard API results)
+      if (!this.symbolNames[symbol]) continue;
       if (!q.price || !q.yp || q.yp === 0) continue;
       const changePct = ((q.price - q.yp) / q.yp) * 100;
       entries.push({ symbol, price: q.price, changePct });
